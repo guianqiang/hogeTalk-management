@@ -1,0 +1,223 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Songti SC";
+  --font-sans: "HarmonyOS Sans SC";
+  --font-cn-serif: "Songti SC";
+  --font-cn-sans: "MiSans", "Source Han Sans CN", "PingFang SC";
+  --background: 36 24% 95%;
+  --foreground: 230 15% 10%;
+  --card: 36 33% 99%;
+  --card-foreground: 230 15% 10%;
+  --popover: 36 33% 99%;
+  --popover-foreground: 230 15% 10%;
+  --primary: 18 82% 40%;
+  --primary-foreground: 35 40% 98%;
+  --secondary: 32 18% 93%;
+  --secondary-foreground: 230 15% 18%;
+  --muted: 32 15% 90%;
+  --muted-foreground: 230 8% 40%;
+  --accent: 32 18% 93%;
+  --accent-foreground: 230 15% 14%;
+  --destructive: 0 72% 46%;
+  --destructive-foreground: 35 40% 98%;
+  --border: 30 14% 82%;
+  --input: 30 14% 82%;
+  --ring: 18 82% 40%;
+  --radius: 0.5rem;
+  --brand-ink: #1f2026;
+  --brand-ink-soft: #2f3038;
+  --brand-paper: #fbf9f4;
+  --brand-ground: #f8f5ef;
+  --brand-line: #d8d1c8;
+  --brand-accent: #ea580c;
+  --brand-accent-soft: #fff7ed;
+  --brand-red: #dc2626;
+  --brand-green: #15803d;
+  --brand-muted: #5a5c66;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  background: #f6f3ed;
+}
+
+body {
+  min-height: 100vh;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  font-family: var(--font-sans), var(--font-cn-sans), sans-serif;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  outline-offset: 3px;
+}
+
+::selection {
+  color: hsl(var(--foreground));
+  background: rgb(234 88 12 / 0.3);
+}
+
+.surface-shadow {
+  box-shadow:
+    0 1px 2px rgb(31 32 38 / 0.04),
+    0 8px 24px rgb(31 32 38 / 0.04);
+}
+
+.fine-grid {
+  background: hsl(var(--background));
+}
+
+.font-display {
+  font-family: var(--font-display), var(--font-cn-serif), ui-serif, serif;
+  font-feature-settings: "ss01", "ss02";
+}
+
+.font-data {
+  font-family: "IBM Plex Mono", "SFMono-Regular", "Cascadia Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-surface {
+  border: 1px solid hsl(var(--border) / 0.72);
+  border-radius: 0.625rem;
+  background: hsl(var(--card));
+  box-shadow:
+    0 1px 2px rgb(31 32 38 / 0.035),
+    0 8px 22px rgb(31 32 38 / 0.025);
+}
+
+.product-surface {
+  border: 1px solid hsl(var(--border) / 0.72);
+  border-radius: 0.75rem;
+  background: hsl(var(--card));
+  box-shadow:
+    0 1px 2px rgb(31 32 38 / 0.04),
+    0 9px 26px rgb(31 32 38 / 0.035);
+}
+
+.panel-heading {
+  background: rgb(255 254 252 / 0.72);
+}
+
+.workspace-overview {
+  position: relative;
+  background:
+    linear-gradient(105deg, rgb(255 254 252) 0%, rgb(255 254 252) 62%, rgb(255 247 237 / 0.82) 100%);
+  box-shadow:
+    0 1px 2px rgb(31 32 38 / 0.045),
+    0 10px 28px rgb(31 32 38 / 0.035);
+}
+
+.workspace-overview::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  content: "";
+  background: var(--brand-accent);
+}
+
+.operating-pulse {
+  position: relative;
+  background: rgb(248 245 239 / 0.64);
+}
+
+.operating-pulse::before {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  width: clamp(96px, 18%, 220px);
+  height: 2px;
+  content: "";
+  background: var(--brand-accent);
+}
+
+.metric-card {
+  box-shadow:
+    0 1px 2px rgb(31 32 38 / 0.04),
+    0 7px 18px rgb(31 32 38 / 0.025);
+}
+
+@media (hover: hover) {
+  .metric-card:hover {
+    z-index: 1;
+    border-color: rgb(234 88 12 / 0.28);
+    box-shadow:
+      0 2px 4px rgb(31 32 38 / 0.045),
+      0 12px 26px rgb(31 32 38 / 0.05);
+    transform: translateY(-1px);
+  }
+}
+
+.section-kicker {
+  color: var(--brand-accent);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * 旧系统视觉兼容层：业务页面仍有少量首版硬编码色值。
+ * 在组件逐步语义化前，统一映射到旧系统的 ink / paper / ember 色板。
+ */
+[class~="text-[#17253a]"] { color: hsl(var(--foreground)); }
+[class~="text-[#4d4c48]"] { color: #2f3038; }
+[class~="text-[#5e5d59]"],
+[class~="text-[#6b6962]"],
+[class~="text-[#77756e]"],
+[class~="text-[#87867f]"],
+[class~="text-[#9a978f]"] { color: hsl(var(--muted-foreground)); }
+[class~="text-[#8a6631]"],
+[class~="text-[#8b642b]"],
+[class~="text-[#946d32]"],
+[class~="text-[#805f2d]"],
+[class~="text-[#a77a38]"] { color: #c2410c; }
+[class~="text-[#d1ad70]"],
+[class~="text-[#d5b57d]"],
+[class~="text-[#e0bf84]"],
+[class~="text-[#e2bc79]"] { color: #fb923c; }
+[class~="bg-[#f5f4ed]"] { background-color: hsl(var(--background)); }
+[class~="bg-[#faf9f5]"],
+[class~="bg-white"] { background-color: hsl(var(--card)); }
+[class~="bg-[#f0eee6]"],
+[class~="bg-[#e8e6dc]"] { background-color: hsl(var(--accent)); }
+[class~="bg-[#faf5e9]"],
+[class~="bg-[#faf6ec]"] { background-color: #fff7ed; }
+[class~="bg-[#d4ab65]"],
+[class~="bg-[#b88942]"],
+[class~="bg-[#b98b42]"] { background-color: #ea580c; }
+[class~="border-[#e3e0d7]"],
+[class~="border-[#ded9ce]"],
+[class~="border-[#dedbd4]"],
+[class~="border-[#ddd5c6]"] { border-color: hsl(var(--border)); }
+[class~="border-[#dec9a5]"],
+[class~="border-[#d6c29e]"],
+[class~="border-[#b89b6b]"] { border-color: #fed7aa; }
+[class~="hover:bg-[#f0eee6]"]:hover,
+[class~="hover:bg-[#e8e6dc]"]:hover,
+[class~="hover:bg-[#f0eee6]/70"]:hover { background-color: hsl(var(--accent)); }
+[class~="hover:text-[#17253a]"]:hover { color: hsl(var(--foreground)); }

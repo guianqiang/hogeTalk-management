@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+.codebase-memory/
+.env
+.env.local
+.env.*.local
+!.env.example
+coverage/
+playwright-report/
+test-results/
+tmp/
+*.tsbuildinfo
+.DS_Store
+.gstack/
