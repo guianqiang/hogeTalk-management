@@ -21,6 +21,7 @@ import { PageHeading } from '@/components/management/page-heading'
 import { StatusBadge } from '@/components/management/status-badge'
 import { requestManagementResource } from '@/api/client/scaffolded-management'
 import { useManagement } from '@/lib/management'
+import { navigationForWorkspace } from '@/lib/navigation'
 import type { WorkspaceRole } from '@/lib/types'
 
 const roleLabels: Record<WorkspaceRole, string> = {
@@ -112,14 +113,43 @@ export function DashboardScreen() {
       accent: 'border-rose-200 bg-rose-50 text-rose-700',
     },
   ] as const
+  const navigationItems = navigationForWorkspace(workspace).flatMap((group) => group.items)
+  const allowedNavigationHrefs = new Set(navigationItems.map((item) => item.href))
+  const quickEntries = workspace.role === 'platform_admin'
+    ? governanceEntries.filter((item) => allowedNavigationHrefs.has(item.href))
+    : navigationItems
+      .filter((item) => item.href)
+      .slice(0, 4)
+      .map((item) => ({
+        href: item.href,
+        label: item.label,
+        note: item.note,
+        icon: ArrowRight,
+        accent: 'border-ember-200 bg-ember-50 text-ember-700',
+      }))
+  const platformHeading = workspace.role === 'platform_admin'
+    ? {
+        title: '平台工作台',
+        description: '集中处理企业认领、争议、重复企业与平台认证事务。',
+        eyebrow: '治理工作队列',
+        sectionTitle: '常用审核入口',
+        sectionNote: '按事项类型进入队列，查看材料与处理记录。',
+      }
+    : {
+        title: '运营工作台',
+        description: '按照已分配的运营菜单处理内容、线索与平台事务。',
+        eyebrow: '当前工作范围',
+        sectionTitle: '常用运营入口',
+        sectionNote: '快捷入口与左侧菜单保持一致，不展示未分配的功能。',
+      }
 
   return (
     <div>
       <PageHeading
         eyebrow="运营总览"
-        title={isPlatform ? '平台工作台' : '商会工作台'}
+        title={isPlatform ? platformHeading.title : '商会工作台'}
         description={isPlatform
-          ? '集中处理企业认领、争议、重复企业与平台认证事务。'
+          ? platformHeading.description
           : '掌握会员企业、认证状态和需要跟进的资料。'}
         icon={CalendarDays}
         action={
@@ -194,42 +224,43 @@ export function DashboardScreen() {
           <section className="mt-4 overflow-hidden rounded-xl border border-border/70 bg-card">
             <div className="flex flex-col gap-2 border-b border-border/60 px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
               <div>
-                <p className="text-[11px] font-semibold tracking-[0.08em] text-ember-700">治理工作队列</p>
-                <h2 className="mt-1 text-base font-semibold">常用审核入口</h2>
-                <p className="mt-1 text-xs text-muted-foreground">按事项类型进入队列，查看材料与处理记录。</p>
+                <p className="text-[11px] font-semibold tracking-[0.08em] text-ember-700">{platformHeading.eyebrow}</p>
+                <h2 className="mt-1 text-base font-semibold">{platformHeading.sectionTitle}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">{platformHeading.sectionNote}</p>
               </div>
               <span className="w-fit rounded-full border bg-muted/20 px-2.5 py-1 text-[11px] text-muted-foreground">
-                4 类治理事项
+                {quickEntries.length} 个快捷入口
               </span>
             </div>
             <div className="p-3 sm:p-4">
               {platformError ? (
-                <div className="py-8 text-center">
-                  <CalendarClock className="mx-auto h-9 w-9 text-red-600" />
-                  <h2 className="mt-4 font-semibold">平台概览加载失败</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">{platformError}</p>
+                <div className="mb-3 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50/60 px-4 py-3">
+                  <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800">统计数据暂时无法加载</p>
+                    <p className="mt-1 text-xs text-red-700">{platformError}</p>
+                  </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  {governanceEntries.map(({ href, label, note, icon: Icon, accent }) => (
-                    <Link
-                      key={href}
-                      href={`/w/${workspace.id}${href}`}
-                      className="group relative min-h-32 overflow-hidden rounded-lg border border-border/75 bg-background px-3 py-3 transition-[border-color,box-shadow,transform,background-color] duration-200 hover:-translate-y-0.5 hover:border-ember-200 hover:bg-ember-50/20 hover:shadow-[0_10px_24px_rgb(31_32_38/0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 sm:min-h-36 sm:px-4 sm:py-4"
-                    >
-                      <span className="flex items-start justify-between gap-3">
-                        <span className={`grid h-9 w-9 place-items-center rounded-lg border ${accent}`}>
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-1 group-hover:text-ember-700" />
+              ) : null}
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {quickEntries.map(({ href, label, note, icon: Icon, accent }) => (
+                  <Link
+                    key={href}
+                    href={`/w/${workspace.id}${href}`}
+                    className="group relative min-h-32 overflow-hidden rounded-lg border border-border/75 bg-background px-3 py-3 transition-[border-color,box-shadow,transform,background-color] duration-200 hover:-translate-y-0.5 hover:border-ember-200 hover:bg-ember-50/20 hover:shadow-[0_10px_24px_rgb(31_32_38/0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 sm:min-h-36 sm:px-4 sm:py-4"
+                  >
+                    <span className="flex items-start justify-between gap-3">
+                      <span className={`grid h-9 w-9 place-items-center rounded-lg border ${accent}`}>
+                        <Icon className="h-4 w-4" />
                       </span>
-                      <span className="mt-4 block text-sm font-semibold tracking-[-0.01em] sm:mt-5 sm:text-base">{label}</span>
-                      <span className="mt-1.5 block text-[11px] leading-4 text-muted-foreground sm:text-xs sm:leading-5">{note}</span>
-                      <span className="absolute inset-x-4 bottom-0 h-0.5 origin-left scale-x-0 rounded-full bg-ember-600 transition-transform duration-200 group-hover:scale-x-100" />
-                    </Link>
-                  ))}
-                </div>
-              )}
+                      <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-1 group-hover:text-ember-700" />
+                    </span>
+                    <span className="mt-4 block text-sm font-semibold tracking-[-0.01em] sm:mt-5 sm:text-base">{label}</span>
+                    <span className="mt-1.5 block text-[11px] leading-4 text-muted-foreground sm:text-xs sm:leading-5">{note}</span>
+                    <span className="absolute inset-x-4 bottom-0 h-0.5 origin-left scale-x-0 rounded-full bg-ember-600 transition-transform duration-200 group-hover:scale-x-100" />
+                  </Link>
+                ))}
+              </div>
               {Array.isArray(platformStats?.unavailable_metrics) && platformStats.unavailable_metrics.length > 0 && (
                 <p className="mt-4 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                   暂不可用指标：{platformStats.unavailable_metrics.join('、')}
