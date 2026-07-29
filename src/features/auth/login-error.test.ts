@@ -20,4 +20,10 @@ describe('customerLoginError', () => {
 
     expect(customerLoginError(error)).toBe('当前账号尚未开通管理权限，请联系所属组织管理员。')
   })
+
+  it('mentions both supported login identifiers for invalid credentials', () => {
+    const error = new ManagementApiError(401, 'E_AUTH_INVALID', '登录失败', null, 'req_test')
+
+    expect(customerLoginError(error)).toBe('管理账号、手机号或密码不正确，请重新输入。')
+  })
 })

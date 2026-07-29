@@ -80,7 +80,7 @@ export const verificationEnterpriseSchema = z.object({
   ownership_status: z.enum(['unclaimed', 'claimed', 'disputed']),
   directory_visibility: z.enum(['private', 'listed']),
   created_at: z.string(),
-}).strict()
+}).strip()
 
 export const verificationEvidenceSchema = z.object({
   id: z.string(),
@@ -112,7 +112,9 @@ export const verificationApplicationSchema = z.object({
 export const duplicateCaseSchema = z.object({
   id: z.string(),
   source_enterprise_id: z.string(),
+  source_enterprise: verificationEnterpriseSchema.optional(),
   candidate_enterprise_id: z.string(),
+  candidate_enterprise: verificationEnterpriseSchema.optional(),
   risk_score: z.number().min(0).max(1),
   status: z.enum(['open', 'ignored', 'confirmed', 'merged']),
   created_at: z.string(),
@@ -121,6 +123,7 @@ export const duplicateCaseSchema = z.object({
 export const ownershipDisputeSchema = z.object({
   id: z.string(),
   enterprise_id: z.string(),
+  enterprise: verificationEnterpriseSchema.optional(),
   claimant_account_id: z.string(),
   status: z.enum([
     'submitted',
@@ -132,55 +135,53 @@ export const ownershipDisputeSchema = z.object({
   ]),
   reason: z.string(),
   resolution: z.string().nullable().optional(),
+  evidence: z.array(z.unknown()).optional(),
   created_at: z.string(),
   updated_at: z.string(),
 }).strict()
 
-export const reviewerGrantSchema = z.object({
-  reviewer_grant_id: z.string(),
-  action: z.string(),
-  scope_type: z.enum(['platform', 'country', 'chamber', 'enterprise']),
-  scope_id: z.string(),
-  country_code: z.string().nullable().optional(),
-  valid_from: z.string(),
-  valid_to: z.string().nullable().optional(),
-}).strict()
+export const managementMenuKeySchema = z.enum([
+  'dashboard',
+  'enterprise_auth',
+  'chamber_management',
+  'content_management',
+  'product_management',
+  'activity_operations',
+  'inquiry_cooperation',
+  'notification_center',
+  'account_governance',
+  'billing_governance',
+  'audit_export',
+])
 
-export const staffAssignmentSchema = z.object({
+const currentStaffAssignmentSchema = z.object({
   staff_assignment_id: z.string(),
-  workspace_id: z.string(),
+  enterprise_id: z.string(),
   membership_id: z.string(),
   account_id: z.string(),
+  username: z.string(),
   display_name: z.string(),
   masked_phone: z.string(),
   title: z.string(),
   role_template: z.enum(['platform_admin', 'platform_operator', 'chamber_admin']),
   status: z.enum(['active', 'revoked']),
-  grants: z.array(reviewerGrantSchema),
+  menu_keys: z.array(managementMenuKeySchema),
+  must_change_password: z.boolean(),
   joined_at: z.string(),
   last_active_at: z.string().nullable().optional(),
-  version: z.number().int().nonnegative(),
+  version: z.number().int().positive(),
 }).strict()
 
-export const permissionCatalogSchema = z.object({
-  workspace_id: z.string(),
-  role_templates: z.array(z.enum(['platform_admin', 'platform_operator', 'chamber_admin'])),
-  actions: z.array(z.object({
-    action: z.string(),
-    allowed_scope_types: z.array(z.enum(['platform', 'country', 'chamber', 'enterprise'])),
-    delegable: z.boolean(),
+export const staffAssignmentSchema = currentStaffAssignmentSchema
+
+export const menuCatalogSchema = z.object({
+  enterprise_id: z.string(),
+  items: z.array(z.object({
+    menu_key: managementMenuKeySchema,
+    display_name: z.string(),
+    description: z.string(),
+    route: z.string(),
   }).strict()),
-}).strict()
-
-export const staffInvitationSchema = z.object({
-  id: z.string(),
-  workspace_id: z.string(),
-  masked_destination: z.string(),
-  role_template: z.enum(['platform_admin', 'platform_operator', 'chamber_admin']),
-  status: z.enum(['pending', 'accepted', 'expired', 'revoked']),
-  invitation_code: z.string().optional(),
-  expires_at: z.string(),
-  created_at: z.string(),
 }).strict()
 
 export type EnterpriseClaimDto = z.infer<typeof enterpriseClaimSchema>
@@ -191,4 +192,5 @@ export type VerificationStatusDto = z.infer<typeof verificationStatusSchema>
 export type DuplicateCaseDto = z.infer<typeof duplicateCaseSchema>
 export type OwnershipDisputeDto = z.infer<typeof ownershipDisputeSchema>
 export type StaffAssignmentDto = z.infer<typeof staffAssignmentSchema>
-export type PermissionCatalogDto = z.infer<typeof permissionCatalogSchema>
+export type MenuCatalogDto = z.infer<typeof menuCatalogSchema>
+export type ManagementMenuKey = z.infer<typeof managementMenuKeySchema>

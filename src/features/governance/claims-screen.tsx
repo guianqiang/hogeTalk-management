@@ -282,7 +282,10 @@ export function ClaimsScreen() {
               <div className="grid gap-3 rounded-lg border bg-muted/25 p-4 text-sm sm:grid-cols-2">
                 <p><span className="text-muted-foreground">企业主体：</span>{selected.enterprise_id}</p>
                 <p><span className="text-muted-foreground">申请账号：</span>{selected.claimant_account_id}</p>
-                <p><span className="text-muted-foreground">当前状态：</span><StatusBadge status={selected.status} /></p>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">当前状态：</span>
+                  <StatusBadge status={selected.status} />
+                </div>
                 <p><span className="text-muted-foreground">材料数量：</span>{selected.evidence?.length ?? 0}</p>
               </div>
               <div>

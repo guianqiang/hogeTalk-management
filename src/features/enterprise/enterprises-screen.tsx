@@ -3,6 +3,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import {
+  actOnChamberAffiliation,
+  createChamberAffiliation,
+  listChamberCertificationLevels,
+  listChamberEnterpriseImportRows,
+} from '@/api/client/management'
+import type {
+  CertificationLevelDto,
+  ImportRowDto,
+} from '@/api/generated/huameng'
+import {
   Building2,
   CircleCheckBig,
   Clock3,
@@ -29,6 +39,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { PageHeading } from '@/components/management/page-heading'
 import { StatusBadge } from '@/components/management/status-badge'
 import { useManagement } from '@/lib/management'
@@ -36,7 +48,8 @@ import {
   isTerminalImportJobStatus,
   nextImportPollDelay,
 } from './import-polling'
-import { PlatformEnterprisesPreview } from './platform-enterprises-preview'
+import { OperationalModuleScreen } from '@/features/legacy/operational-module-screen'
+import type { ChamberAffiliation } from '@/lib/types'
 
 function dateTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -68,6 +81,20 @@ export function EnterprisesScreen() {
     tone: 'waiting' | 'error'
     message: string
   } | null>(null)
+  const [importRowsOpen, setImportRowsOpen] = useState(false)
+  const [importRows, setImportRows] = useState<ImportRowDto[]>([])
+  const [importRowsLoading, setImportRowsLoading] = useState(false)
+  const [affiliationOpen, setAffiliationOpen] = useState(false)
+  const [enterpriseId, setEnterpriseId] = useState('')
+  const [certificationLevelCode, setCertificationLevelCode] = useState('none')
+  const [affiliationReason, setAffiliationReason] = useState('manual')
+  const [levels, setLevels] = useState<CertificationLevelDto[]>([])
+  const [affiliationAction, setAffiliationAction] = useState<{
+    affiliation: ChamberAffiliation
+    action: 'suspend' | 'restore' | 'end' | 'certify' | 'renew_certification' | 'revoke_certification'
+  } | null>(null)
+  const [actionReason, setActionReason] = useState('')
+  const [actionLevelCode, setActionLevelCode] = useState('')
   const latestJob = snapshot?.importJobs[0]
 
   useEffect(() => {
@@ -137,7 +164,7 @@ export function EnterprisesScreen() {
   if (!workspace) return null
 
   if (workspace.kind === 'platform') {
-    return <PlatformEnterprisesPreview />
+    return <OperationalModuleScreen module="accounts" />
   }
 
   const progress = latestJob?.totalRows
@@ -204,6 +231,120 @@ export function EnterprisesScreen() {
     }
   }
 
+  async function loadLevels() {
+    try {
+      const result = await listChamberCertificationLevels(workspaceId, { enabled: true })
+      setLevels(result.items)
+      return result.items
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '认证等级加载失败')
+      return []
+    }
+  }
+
+  async function openAffiliationCreate() {
+    await loadLevels()
+    setEnterpriseId('')
+    setCertificationLevelCode('none')
+    setAffiliationReason('manual')
+    setAffiliationOpen(true)
+  }
+
+  async function submitAffiliation() {
+    if (!enterpriseId.trim()) {
+      toast.error('请填写已有企业 ID')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await createChamberAffiliation(workspaceId, {
+        enterprise_id: enterpriseId.trim(),
+        certification_level_code: certificationLevelCode === 'none' ? null : certificationLevelCode,
+        reason: affiliationReason.trim() || 'manual',
+      })
+      await refreshWorkspace(workspaceId)
+      setAffiliationOpen(false)
+      toast.success('企业归属关系已建立')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '建立企业归属失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function openAffiliationAction(
+    affiliation: ChamberAffiliation,
+    action: NonNullable<typeof affiliationAction>['action'],
+  ) {
+    if (action === 'certify' || action === 'renew_certification') {
+      const availableLevels = await loadLevels()
+      setActionLevelCode(availableLevels.find((level) => level.is_default)?.code ?? availableLevels[0]?.code ?? '')
+    } else {
+      setActionLevelCode('')
+    }
+    setActionReason('')
+    setAffiliationAction({ affiliation, action })
+  }
+
+  async function submitAffiliationAction() {
+    if (!affiliationAction) return
+    const { affiliation, action } = affiliationAction
+    if (['end', 'revoke_certification'].includes(action) && !actionReason.trim()) {
+      toast.error('该操作必须填写原因')
+      return
+    }
+    if (['certify', 'renew_certification'].includes(action) && !actionLevelCode) {
+      toast.error('请选择认证等级')
+      return
+    }
+    setSubmitting(true)
+    try {
+      if (action === 'certify' || action === 'renew_certification') {
+        await actOnChamberAffiliation(workspaceId, affiliation.affiliationId, {
+          action,
+          certification_level_code: actionLevelCode,
+          reason: actionReason.trim() || null,
+          expected_version: affiliation.version,
+        })
+      } else if (action === 'end' || action === 'revoke_certification') {
+        await actOnChamberAffiliation(workspaceId, affiliation.affiliationId, {
+          action,
+          reason: actionReason.trim(),
+          expected_version: affiliation.version,
+        })
+      } else {
+        await actOnChamberAffiliation(workspaceId, affiliation.affiliationId, {
+          action,
+          reason: actionReason.trim() || null,
+          expected_version: affiliation.version,
+        })
+      }
+      await refreshWorkspace(workspaceId)
+      setAffiliationAction(null)
+      toast.success('企业归属与认证状态已更新')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '状态更新失败')
+      await refreshWorkspace(workspaceId).catch(() => undefined)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function openImportRows() {
+    if (!latestJob) return
+    setImportRowsOpen(true)
+    setImportRowsLoading(true)
+    try {
+      const result = await listChamberEnterpriseImportRows(workspaceId, latestJob.jobId)
+      setImportRows(result.items)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '导入行读取失败')
+      setImportRows([])
+    } finally {
+      setImportRowsLoading(false)
+    }
+  }
+
   return (
     <div>
       <PageHeading
@@ -220,6 +361,10 @@ export function EnterprisesScreen() {
             >
               <RefreshCcw className={`h-4 w-4 ${snapshot?.loading ? 'animate-spin' : ''}`} />
               刷新
+            </Button>
+            <Button variant="outline" onClick={() => void openAffiliationCreate()}>
+              <Building2 className="h-4 w-4" />
+              添加已有企业
             </Button>
             <Button onClick={() => setImportOpen(true)}>
               <Upload className="h-4 w-4" />
@@ -275,6 +420,11 @@ export function EnterprisesScreen() {
                   </div>
                 ))}
               </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => void openImportRows()}>
+                查看逐行结果
+              </Button>
             </div>
             <Progress className="mt-4" value={progress} aria-label="企业导入进度" />
             {latestJobProcessing && !latestJobNotice && (
@@ -343,6 +493,7 @@ export function EnterprisesScreen() {
                   <th className="px-4 py-3 font-medium">商会认证</th>
                   <th className="px-4 py-3 font-medium">平台认证</th>
                   <th className="px-5 py-3 font-medium">加入时间</th>
+                  <th className="px-5 py-3 font-medium">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -364,6 +515,27 @@ export function EnterprisesScreen() {
                       </td>
                       <td className="px-4 py-4"><StatusBadge status={item.platformVerificationStatus} /></td>
                       <td className="font-data px-5 py-4 text-xs text-muted-foreground">{dateTime(item.joinedAt)}</td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {item.status === 'active' ? (
+                            <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'suspend')}>暂停</Button>
+                          ) : item.status === 'suspended' ? (
+                            <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'restore')}>恢复</Button>
+                          ) : null}
+                          {item.status !== 'ended' && (
+                            <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'end')}>结束关系</Button>
+                          )}
+                          {!certification && item.status === 'active' && (
+                            <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'certify')}>签发认证</Button>
+                          )}
+                          {certification?.status === 'active' && (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'renew_certification')}>续期</Button>
+                              <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'revoke_certification')}>撤销认证</Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   )
                 })}
@@ -472,6 +644,126 @@ export function EnterprisesScreen() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={affiliationOpen} onOpenChange={setAffiliationOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>添加已有企业</DialogTitle>
+            <DialogDescription>建立商会归属关系，可同时签发首期商会认证。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="affiliation-enterprise-id">企业 ID</Label>
+            <Input id="affiliation-enterprise-id" value={enterpriseId} onChange={(event) => setEnterpriseId(event.target.value)} placeholder="ent_xxx" />
+          </div>
+          <div className="space-y-2">
+            <Label>首期认证等级</Label>
+            <Select value={certificationLevelCode} onValueChange={setCertificationLevelCode}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">暂不签发认证</SelectItem>
+                {levels.map((level) => (
+                  <SelectItem key={level.id} value={level.code}>{level.name}（{level.code}）</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="affiliation-reason">建立原因</Label>
+            <Input id="affiliation-reason" value={affiliationReason} onChange={(event) => setAffiliationReason(event.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAffiliationOpen(false)}>取消</Button>
+            <Button disabled={submitting} onClick={() => void submitAffiliation()}>
+              {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              建立关系
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(affiliationAction)} onOpenChange={(open) => !open && setAffiliationAction(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>更新企业归属与认证</DialogTitle>
+            <DialogDescription>
+              将对“{affiliationAction?.affiliation.enterpriseName}”执行 {affiliationAction?.action}。409 冲突时页面会重新读取当前版本。
+            </DialogDescription>
+          </DialogHeader>
+          {affiliationAction && ['certify', 'renew_certification'].includes(affiliationAction.action) && (
+            <div className="space-y-2">
+              <Label>认证等级</Label>
+              <Select value={actionLevelCode} onValueChange={setActionLevelCode}>
+                <SelectTrigger><SelectValue placeholder="选择等级" /></SelectTrigger>
+                <SelectContent>
+                  {levels.map((level) => (
+                    <SelectItem key={level.id} value={level.code}>{level.name}（{level.code}）</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="affiliation-action-reason">
+              原因 {affiliationAction && ['end', 'revoke_certification'].includes(affiliationAction.action) ? '（必填）' : '（选填）'}
+            </Label>
+            <Textarea id="affiliation-action-reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAffiliationAction(null)}>取消</Button>
+            <Button disabled={submitting} onClick={() => void submitAffiliationAction()}>
+              {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              确认执行
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={importRowsOpen} onOpenChange={setImportRowsOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>导入逐行结果</DialogTitle>
+            <DialogDescription>企业解析、归属和认证结果分别展示，失败行保留明确错误。</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto rounded-md border">
+            {importRowsLoading ? (
+              <div className="grid min-h-40 place-items-center"><LoaderCircle className="h-7 w-7 animate-spin text-ember-600" /></div>
+            ) : (
+              <table className="w-full min-w-[760px] text-left text-xs">
+                <thead className="sticky top-0 bg-muted">
+                  <tr>
+                    <th className="px-3 py-2">行</th>
+                    <th className="px-3 py-2">企业</th>
+                    <th className="px-3 py-2">处理状态</th>
+                    <th className="px-3 py-2">企业解析</th>
+                    <th className="px-3 py-2">归属</th>
+                    <th className="px-3 py-2">认证</th>
+                    <th className="px-3 py-2">错误</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {importRows.map((row) => (
+                    <tr key={row.row_id}>
+                      <td className="px-3 py-3 font-data">{row.row_number}</td>
+                      <td className="px-3 py-3">{row.legal_name}</td>
+                      <td className="px-3 py-3"><StatusBadge status={row.status} /></td>
+                      <td className="px-3 py-3">{row.enterprise_resolution}</td>
+                      <td className="px-3 py-3">{row.affiliation_result}</td>
+                      <td className="px-3 py-3">{row.chamber_certification_result}</td>
+                      <td className="px-3 py-3 text-red-700">{row.error?.message ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {!importRowsLoading && importRows.length === 0 && (
+              <p className="px-4 py-12 text-center text-sm text-muted-foreground">暂无逐行结果</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportRowsOpen(false)}>关闭</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

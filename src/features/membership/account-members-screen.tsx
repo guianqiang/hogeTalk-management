@@ -1,17 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Copy, LoaderCircle, Plus, UserRoundCog } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Copy, KeyRound, LoaderCircle, Pencil, Plus, UserRoundCog } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  getManagementPermissionCatalog,
-  inviteManagementStaff,
+  createManagementStaffAccount,
+  getManagementMenuCatalog,
   listManagementStaff,
   updateManagementStaff,
 } from '@/api/client/management'
 import type {
-  PermissionCatalogDto,
+  ManagementMenuKey,
+  MenuCatalogDto,
   StaffAssignmentDto,
 } from '@/api/generated/huameng-platform'
 import { PageHeading } from '@/components/management/page-heading'
@@ -37,46 +38,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { useManagement } from '@/lib/management'
 import { QueueEmpty, QueueError, QueueLoading } from '@/features/governance/queue-state'
+import { useManagement } from '@/lib/management'
+import {
+  defaultStaffTitle,
+  staffMenuSummary,
+  validOperatorMenuKeys,
+  type StaffRoleTemplate,
+} from '@/lib/staff-role-templates'
 
-const roleLabels = {
+const roleLabels: Record<StaffRoleTemplate, string> = {
   platform_admin: '平台管理员',
-  platform_operator: '平台运营员',
+  platform_operator: '运营人员',
   chamber_admin: '商会管理员',
-} as const
-
-const actionLabels: Record<string, string> = {
-  'management.access': '进入管理平台',
-  'staff.invite': '邀请后台人员',
-  'staff.manage': '管理人员与权限',
-  'enterprise.import': '导入会员企业',
-  'enterprise.verify': '审核平台认证',
-  'claim.review': '审核企业认领',
-  'claim.escalate': '发起二次复核',
-  'duplicate.review': '处理重复企业',
-  'dispute.review': '处理所有权争议',
-  'evidence.read': '查看审核材料',
-  'audit.read': '查看操作审计',
 }
-
-const defaultActionCatalog = [
-  'management.access',
-  'staff.invite',
-  'staff.manage',
-  'enterprise.import',
-  'enterprise.verify',
-  'claim.review',
-  'claim.escalate',
-  'duplicate.review',
-  'dispute.review',
-  'evidence.read',
-  'audit.read',
-].map((action) => ({
-  action,
-  allowed_scope_types: ['platform', 'country', 'chamber', 'enterprise'] as const,
-  delegable: true,
-}))
 
 function dateTime(value: string | null | undefined) {
   if (!value) return '暂无记录'
@@ -86,107 +61,194 @@ function dateTime(value: string | null | undefined) {
   }).format(new Date(value))
 }
 
+function generateInitialPassword() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%*'
+  const values = crypto.getRandomValues(new Uint32Array(14))
+  return `Hm!8${[...values].map((value) => chars[value % chars.length]).join('')}`
+}
+
 export function AccountMembersScreen() {
   const params = useParams<{ workspaceId: string }>()
   const { availableWorkspaces } = useManagement()
   const workspace = availableWorkspaces.find((item) => item.id === params.workspaceId)
   const [items, setItems] = useState<StaffAssignmentDto[]>([])
-  const [catalog, setCatalog] = useState<PermissionCatalogDto | null>(null)
+  const [catalog, setCatalog] = useState<MenuCatalogDto | null>(null)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [keyword, setKeyword] = useState('')
-  const [inviteOpen, setInviteOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createdAccount, setCreatedAccount] = useState<StaffAssignmentDto | null>(null)
+  const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [phone, setPhone] = useState('')
-  const [title, setTitle] = useState('')
-  const [roleTemplate, setRoleTemplate] = useState<'platform_admin' | 'platform_operator' | 'chamber_admin'>(
-    workspace?.kind === 'chamber' ? 'chamber_admin' : 'platform_operator',
-  )
-  const [selectedActions, setSelectedActions] = useState<string[]>([])
-  const [scopeType, setScopeType] = useState<'platform' | 'country' | 'chamber' | 'enterprise'>(
-    workspace?.kind === 'chamber' ? 'chamber' : 'platform',
-  )
-  const [scopeId, setScopeId] = useState(workspace?.kind === 'chamber' ? params.workspaceId : 'hm')
-  const [countryCode, setCountryCode] = useState('')
+  const [initialPassword, setInitialPassword] = useState('')
+  const [roleTemplate, setRoleTemplate] = useState<StaffRoleTemplate>('platform_operator')
+  const [selectedMenuKeys, setSelectedMenuKeys] = useState<ManagementMenuKey[]>([])
   const [submitting, setSubmitting] = useState(false)
-  const [invitationCode, setInvitationCode] = useState<string | null>(null)
+  const [editTarget, setEditTarget] = useState<StaffAssignmentDto | null>(null)
+  const [editRole, setEditRole] = useState<StaffRoleTemplate>('platform_operator')
+  const [editMenuKeys, setEditMenuKeys] = useState<ManagementMenuKey[]>([])
   const [revokeTarget, setRevokeTarget] = useState<StaffAssignmentDto | null>(null)
   const [revokeReason, setRevokeReason] = useState('')
   const [confirmationToken, setConfirmationToken] = useState('')
 
   const load = useCallback(async () => {
+    if (!workspace) return
     setLoading(true)
     setError(null)
     try {
-      const [staff, permissionCatalog] = await Promise.all([
-        listManagementStaff(params.workspaceId, { keyword, limit: 20 }),
-        getManagementPermissionCatalog(params.workspaceId),
+      const [staff, menuCatalog] = await Promise.all([
+        listManagementStaff({ keyword, limit: 20 }),
+        getManagementMenuCatalog(),
       ])
       setItems(staff.items)
-      setCatalog(permissionCatalog)
+      setNextCursor(staff.page.next_cursor ?? null)
+      setCatalog(menuCatalog)
     } catch (nextError) {
       setError(nextError)
     } finally {
       setLoading(false)
     }
-  }, [keyword, params.workspaceId])
+  }, [keyword, workspace])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  const delegableActions = useMemo(
-    () => (catalog?.actions ?? defaultActionCatalog).filter((item) => item.delegable),
-    [catalog],
-  )
-  const roleTemplates = catalog?.role_templates
-    ?? (workspace?.kind === 'chamber'
-      ? ['chamber_admin' as const]
-      : ['platform_admin' as const, 'platform_operator' as const])
+  const menuItems = catalog?.items ?? []
+  const createRoleOptions: StaffRoleTemplate[] = workspace?.kind === 'platform'
+    ? ['platform_admin', 'platform_operator']
+    : ['chamber_admin']
 
-  function toggleAction(action: string, checked: boolean) {
-    setSelectedActions((current) => checked
-      ? [...new Set([...current, action])]
-      : current.filter((item) => item !== action))
+  function resetCreate() {
+    const nextRole = workspace?.kind === 'chamber' ? 'chamber_admin' : 'platform_operator'
+    setUsername('')
+    setDisplayName('')
+    setPhone('')
+    setInitialPassword(generateInitialPassword())
+    setRoleTemplate(nextRole)
+    setSelectedMenuKeys([])
+    setCreatedAccount(null)
   }
 
-  async function submitInvitation() {
-    if (!displayName.trim() || !phone.trim() || !title.trim()) {
-      toast.error('请完整填写姓名、手机号和岗位')
+  function openCreate() {
+    resetCreate()
+    setCreateOpen(true)
+  }
+
+  function toggleMenu(
+    setter: React.Dispatch<React.SetStateAction<ManagementMenuKey[]>>,
+    key: ManagementMenuKey,
+    checked: boolean,
+  ) {
+    setter((current) => checked
+      ? [...new Set([...current, key])]
+      : current.filter((item) => item !== key))
+  }
+
+  async function submitCreate() {
+    if (!/^[A-Za-z][A-Za-z0-9._-]{3,31}$/.test(username.trim())) {
+      toast.error('登录账号需以字母开头，使用 4–32 位字母、数字、点、下划线或中划线')
       return
     }
-    if (!scopeId.trim()) {
-      toast.error('请填写授权范围')
+    if (!displayName.trim()) {
+      toast.error('请填写人员姓名')
+      return
+    }
+    if (initialPassword.length < 12) {
+      toast.error('初始密码至少需要 12 位')
+      return
+    }
+    if (roleTemplate === 'platform_operator' && selectedMenuKeys.length === 0) {
+      toast.error('请至少选择一个可见菜单')
       return
     }
     setSubmitting(true)
     try {
-      const result = await inviteManagementStaff(params.workspaceId, {
-        destination_type: 'phone',
-        destination: phone.trim(),
+      const base = {
+        username: username.trim(),
         display_name: displayName.trim(),
-        title: title.trim(),
+        initial_password: initialPassword,
+        phone: phone.trim() || null,
+        country_code: 'CN',
+        title: defaultStaffTitle(roleTemplate),
+      }
+      const result = await createManagementStaffAccount({
+        ...base,
         role_template: roleTemplate,
-        grants: selectedActions.map((action) => ({
-          action,
-          scope_type: scopeType,
-          scope_id: scopeId.trim(),
-          country_code: scopeType === 'country' ? countryCode.trim().toUpperCase() : null,
-        })),
-        expires_in_seconds: 86400,
+        menu_keys: roleTemplate === 'platform_operator'
+          ? validOperatorMenuKeys(selectedMenuKeys, menuItems)
+          : [],
       })
-      setInvitationCode(result.invitation_code ?? null)
-      toast.success('邀请已创建')
+
+      setCreatedAccount(result)
+      setItems((current) => [
+        result,
+        ...current.filter((item) => item.staff_assignment_id !== result.staff_assignment_id),
+      ])
+      toast.success(`${roleLabels[result.role_template]}账号已创建`)
     } catch (nextError) {
-      toast.error(nextError instanceof Error ? nextError.message : '创建邀请失败')
+      toast.error(nextError instanceof Error ? nextError.message : '账号创建失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function loadMore() {
+    if (!nextCursor) return
+    setLoadingMore(true)
+    try {
+      const result = await listManagementStaff({ keyword, cursor: nextCursor, limit: 20 })
+      setItems((current) => [...current, ...result.items])
+      setNextCursor(result.page.next_cursor ?? null)
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : '下一页人员读取失败')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  function openEdit(item: StaffAssignmentDto) {
+    setEditTarget(item)
+    setEditRole(item.role_template)
+    setEditMenuKeys(item.menu_keys)
+  }
+
+  async function saveStaff() {
+    if (!editTarget) return
+    if (editRole === 'platform_operator' && editMenuKeys.length === 0) {
+      toast.error('请至少选择一个可见菜单')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const result = await updateManagementStaff(editTarget.staff_assignment_id, {
+        action: 'update',
+        role_template: editRole,
+        title: defaultStaffTitle(editRole),
+        menu_keys: editRole === 'platform_operator'
+          ? validOperatorMenuKeys(editMenuKeys, menuItems)
+          : [],
+        expected_version: editTarget.version,
+      })
+      setItems((current) => current.map((item) => (
+        item.staff_assignment_id === result.staff_assignment_id ? result : item
+      )))
+      setEditTarget(null)
+      toast.success('人员类型与可见菜单已更新')
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : '更新失败')
+      await load()
     } finally {
       setSubmitting(false)
     }
   }
 
   async function revokeStaff() {
-    if (!revokeTarget || !revokeReason.trim() || confirmationToken.trim().length < 16) {
-      toast.error('请填写撤销原因和有效的确认凭证')
+    if (!revokeTarget || !revokeReason.trim() || confirmationToken.trim().length < 6) {
+      toast.error('请填写撤销原因和有效的安全确认凭证')
       return
     }
     setSubmitting(true)
@@ -195,12 +257,13 @@ export function AccountMembersScreen() {
         action: 'revoke',
         reason: revokeReason.trim(),
         confirmation_token: confirmationToken.trim(),
+        expected_version: revokeTarget.version,
       })
       setItems((current) => current.map((item) => (
         item.staff_assignment_id === result.staff_assignment_id ? result : item
       )))
       setRevokeTarget(null)
-      toast.success('账号权限已撤销')
+      toast.success('后台账号权限已撤销')
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '撤销失败')
     } finally {
@@ -210,19 +273,70 @@ export function AccountMembersScreen() {
 
   if (!workspace) return null
 
+  const renderStaffCard = (item: StaffAssignmentDto) => (
+    <Card key={item.staff_assignment_id}>
+      <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-ember-100 bg-ember-50 font-semibold text-ember-700">
+          {item.display_name.slice(0, 1)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold">{item.display_name}</p>
+            <StatusBadge status={item.status} />
+            <span className="text-xs text-muted-foreground">{roleLabels[item.role_template]}</span>
+            {item.must_change_password && item.status === 'active' && (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                待首次改密
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            登录账号：<span className="font-data text-foreground">{item.username}</span>
+            {item.masked_phone ? ` · ${item.masked_phone}` : ' · 未绑定手机号'}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {staffMenuSummary(item.role_template, item.menu_keys, menuItems).map((summary) => (
+              <span key={summary} className="rounded-full border bg-muted/35 px-2.5 py-1 text-[11px] text-muted-foreground">
+                {summary}
+              </span>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            创建于 {dateTime(item.joined_at)} · 最近活跃 {dateTime(item.last_active_at)}
+          </p>
+        </div>
+        {item.status === 'active' && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => openEdit(item)}>
+              <Pencil className="h-4 w-4" />编辑
+            </Button>
+            <Button
+              variant="outline"
+              className="text-red-700 hover:text-red-700"
+              onClick={() => {
+                setRevokeTarget(item)
+                setRevokeReason('')
+                setConfirmationToken('')
+              }}
+            >
+              撤销权限
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+
   return (
     <div>
       <PageHeading
         eyebrow="系统"
-        title="账号管理"
-        description={`管理可进入${workspace.kind === 'platform' ? '华盟平台' : '当前商会'}后台的人员和实时授权范围。`}
+        title="人员管理"
+        description={workspace.kind === 'platform'
+          ? '管理平台管理员和运营人员账号；商会管理员请在对应商会下管理。'
+          : '管理可进入当前商会后台的商会管理员账号。'}
         icon={UserRoundCog}
-        action={
-          <Button onClick={() => setInviteOpen(true)}>
-            <Plus className="h-4 w-4" />
-            邀请账号
-          </Button>
-        }
+        action={<Button onClick={() => openCreate()}><Plus className="h-4 w-4" />新建后台账号</Button>}
       />
 
       <Card className="mb-4">
@@ -231,187 +345,213 @@ export function AccountMembersScreen() {
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             onKeyDown={(event) => event.key === 'Enter' && void load()}
-            placeholder="搜索姓名或手机号"
+            placeholder="搜索姓名、登录账号或手机号"
             className="sm:max-w-sm"
           />
           <Button variant="outline" onClick={() => void load()}>搜索</Button>
         </CardContent>
       </Card>
 
-      {loading ? (
-        <QueueLoading />
-      ) : error ? (
+      <div className="mb-3">
+        <h2 className="font-display text-lg font-semibold">
+          {workspace.kind === 'platform' ? '平台人员' : '商会管理员'}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {workspace.kind === 'platform'
+            ? '平台管理员拥有全部权限，运营人员按左侧业务菜单分配工作范围。'
+            : '商会管理员默认拥有当前商会完整管理权限。'}
+        </p>
+      </div>
+
+      {loading ? <QueueLoading /> : error ? (
         <QueueError error={error} onRetry={() => void load()} />
       ) : items.length === 0 ? (
-        <QueueEmpty
-          title="当前还没有其他后台账号"
-          description="邀请人员后，可为其设置岗位、角色模板和精确业务授权。"
-        />
+        <QueueEmpty title="当前还没有后台账号" description="新建后账号立即生效，人员首次登录时必须修改初始密码。" />
       ) : (
         <div className="space-y-3">
-          {items.map((item) => (
-            <Card key={item.staff_assignment_id}>
-              <CardContent className="p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-ember-100 bg-ember-50 font-semibold text-ember-700">
-                    {item.display_name.slice(0, 1)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold">{item.display_name}</p>
-                      <StatusBadge status={item.status} />
-                      <span className="text-xs text-muted-foreground">{roleLabels[item.role_template]}</span>
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">{item.title} · {item.masked_phone}</p>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {item.grants.map((grant) => (
-                        <span
-                          key={grant.reviewer_grant_id}
-                          className="inline-flex rounded-full border bg-muted/35 px-2.5 py-1 text-[11px] text-muted-foreground"
-                        >
-                          {actionLabels[grant.action] ?? grant.action} · {grant.scope_type}:{grant.scope_id}
-                        </span>
-                      ))}
-                      {item.grants.length === 0 && (
-                        <span className="text-xs text-muted-foreground">仅可进入工作空间，暂无业务授权</span>
-                      )}
-                    </div>
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      加入于 {dateTime(item.joined_at)} · 最近活跃 {dateTime(item.last_active_at)}
-                    </p>
-                  </div>
-                  {item.status === 'active' && (
-                    <Button
-                      variant="outline"
-                      className="text-red-700 hover:text-red-700"
-                      onClick={() => {
-                        setRevokeTarget(item)
-                        setRevokeReason('')
-                        setConfirmationToken('')
-                      }}
-                    >
-                      撤销权限
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {items.map((item) => renderStaffCard(item))}
+          {nextCursor && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" disabled={loadingMore} onClick={() => void loadMore()}>
+                {loadingMore && <LoaderCircle className="h-4 w-4 animate-spin" />}加载更多人员
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
-      <Dialog open={inviteOpen} onOpenChange={(open) => {
-        setInviteOpen(open)
-        if (!open) setInvitationCode(null)
+      <Dialog open={createOpen} onOpenChange={(open) => {
+        setCreateOpen(open)
+        if (!open) setCreatedAccount(null)
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{invitationCode ? '邀请已创建' : '邀请后台账号'}</DialogTitle>
+            <DialogTitle>{createdAccount ? '后台账号已创建' : '新建后台账号'}</DialogTitle>
             <DialogDescription>
-              {invitationCode
-                ? '邀请码只在本次创建结果中显示，请通过受信任的方式交给被邀请人。'
-                : '被邀请人确认手机号后，将获得工作空间身份和你明确选择的授权。'}
+              {createdAccount
+                ? '请通过受信任方式把登录账号和初始密码交给该人员；首次登录会强制设置新密码。'
+                : '账号创建后立即生效，不再经过邀请和接受流程。'}
             </DialogDescription>
           </DialogHeader>
-          {invitationCode ? (
-            <div className="rounded-lg border border-ember-200 bg-ember-50/55 p-4">
-              <Label>一次性邀请码</Label>
-              <div className="mt-2 flex gap-2">
-                <Input readOnly value={invitationCode} className="font-data" />
+          {createdAccount ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-ember-200 bg-ember-50/55 p-4">
+                <p className="text-sm font-semibold">{createdAccount.display_name} · {roleLabels[createdAccount.role_template]}</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label>登录账号</Label>
+                    <Input className="mt-2 font-data" readOnly value={createdAccount.username} />
+                  </div>
+                  <div>
+                    <Label>初始密码</Label>
+                    <Input className="mt-2 font-data" readOnly value={initialPassword} />
+                  </div>
+                </div>
                 <Button
+                  className="mt-3"
                   variant="outline"
-                  size="icon"
                   onClick={() => {
-                    void navigator.clipboard.writeText(invitationCode)
-                    toast.success('邀请码已复制')
+                    void navigator.clipboard.writeText(`登录账号：${createdAccount.username}\n初始密码：${initialPassword}`)
+                    toast.success('登录信息已复制')
                   }}
-                  aria-label="复制邀请码"
                 >
-                  <Copy className="h-4 w-4" />
+                  <Copy className="h-4 w-4" />复制登录信息
                 </Button>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">邀请码不会再次显示，也不会写入操作日志。</p>
+              <p className="text-xs leading-5 text-muted-foreground">
+                初始密码不会由接口返回，也不会在关闭弹窗后再次显示。
+              </p>
             </div>
           ) : (
             <div className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="staff-name">姓名</Label>
-                  <Input id="staff-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+                  <Label htmlFor="staff-display-name">姓名</Label>
+                  <Input id="staff-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="staff-phone">手机号</Label>
-                  <Input id="staff-phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+8613800000000" />
+                  <Label htmlFor="staff-username">登录账号</Label>
+                  <Input id="staff-username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="例如 zhangsan.ops" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="staff-title">岗位</Label>
-                  <Input id="staff-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：平台审核员" />
+                  <Label htmlFor="staff-phone">手机号（选填）</Label>
+                  <Input id="staff-phone" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="18800001009" />
                 </div>
                 <div className="space-y-2">
-                  <Label>角色模板</Label>
-                  <Select value={roleTemplate} onValueChange={(value) => setRoleTemplate(value as typeof roleTemplate)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {roleTemplates.map((role) => (
-                        <SelectItem key={role} value={role}>{roleLabels[role]}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="staff-initial-password">初始密码</Label>
+                  <div className="flex gap-2">
+                    <Input id="staff-initial-password" className="font-data" value={initialPassword} onChange={(event) => setInitialPassword(event.target.value)} />
+                    <Button type="button" variant="outline" size="icon" onClick={() => setInitialPassword(generateInitialPassword())} aria-label="重新生成初始密码">
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <Label>业务授权</Label>
-                <div className="mt-2 grid gap-2 rounded-lg border p-3 sm:grid-cols-2">
-                  {delegableActions.map((permission) => (
-                    <label key={permission.action} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted/50">
-                      <Checkbox
-                        checked={selectedActions.includes(permission.action)}
-                        onCheckedChange={(checked) => toggleAction(permission.action, checked === true)}
-                      />
-                      {actionLabels[permission.action] ?? permission.action}
-                    </label>
-                  ))}
-                  {delegableActions.length === 0 && (
-                    <p className="text-sm text-muted-foreground">当前账号没有可下放的业务授权。</p>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>人员类型</Label>
+                  {createRoleOptions.length === 1 ? (
+                    <div className="flex h-10 items-center rounded-md border bg-muted/25 px-3 text-sm font-medium">商会管理员</div>
+                  ) : (
+                    <Select value={roleTemplate} onValueChange={(value) => {
+                      setRoleTemplate(value as StaffRoleTemplate)
+                      setSelectedMenuKeys([])
+                    }}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {createRoleOptions.map((role) => <SelectItem key={role} value={role}>{roleLabels[role]}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   )}
                 </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label>授权范围</Label>
-                  <Select value={scopeType} onValueChange={(value) => setScopeType(value as typeof scopeType)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="platform">整个平台</SelectItem>
-                      <SelectItem value="country">指定国家</SelectItem>
-                      <SelectItem value="chamber">指定商会</SelectItem>
-                      <SelectItem value="enterprise">指定企业</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="scope-id">范围标识</Label>
-                  <Input id="scope-id" value={scopeId} onChange={(event) => setScopeId(event.target.value)} />
-                </div>
-                {scopeType === 'country' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="country-code">国家代码</Label>
-                    <Input id="country-code" value={countryCode} onChange={(event) => setCountryCode(event.target.value)} placeholder="CN" />
+              {roleTemplate === 'platform_operator' ? (
+                <div>
+                  <Label>可见菜单</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">与左侧菜单保持一致，选中后系统自动配置对应业务权限。</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {menuItems.map((menu) => {
+                      const checked = selectedMenuKeys.includes(menu.menu_key)
+                      return (
+                        <label key={menu.menu_key} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${checked ? 'border-ember-300 bg-ember-50/55' : 'hover:bg-muted/30'}`}>
+                          <Checkbox checked={checked} onCheckedChange={(value) => toggleMenu(setSelectedMenuKeys, menu.menu_key, value === true)} />
+                          <span>
+                            <span className="block text-sm font-medium">{menu.display_name}</span>
+                            <span className="mt-1 block text-xs leading-5 text-muted-foreground">{menu.description}</span>
+                          </span>
+                        </label>
+                      )
+                    })}
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-ember-200 bg-ember-50/45 p-4">
+                  <p className="text-sm font-semibold">{roleTemplate === 'platform_admin' ? '平台全部管理权限' : '所属商会全部管理权限'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">该人员类型无需逐项配置菜单。</p>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteOpen(false)}>
-              {invitationCode ? '完成' : '取消'}
-            </Button>
-            {!invitationCode && (
-              <Button disabled={submitting} onClick={() => void submitInvitation()}>
-                {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-                创建邀请
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>{createdAccount ? '完成' : '取消'}</Button>
+            {!createdAccount && (
+              <Button disabled={submitting} onClick={() => void submitCreate()}>
+                {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}创建账号
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editTarget)} onOpenChange={(open) => !open && setEditTarget(null)}>
+        <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>编辑后台人员</DialogTitle>
+            <DialogDescription>保存后人员类型和可见菜单立即生效。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>人员类型</Label>
+              {editTarget?.role_template === 'chamber_admin' || workspace.kind === 'chamber' ? (
+                <div className="flex h-10 items-center rounded-md border bg-muted/25 px-3 text-sm font-medium">商会管理员</div>
+              ) : (
+                <Select value={editRole} onValueChange={(value) => {
+                  setEditRole(value as StaffRoleTemplate)
+                  if (value !== 'platform_operator') setEditMenuKeys([])
+                }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="platform_admin">平台管理员</SelectItem>
+                    <SelectItem value="platform_operator">运营人员</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            {editRole === 'platform_operator' ? (
+              <div>
+                <Label>可见菜单</Label>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {menuItems.map((menu) => {
+                    const checked = editMenuKeys.includes(menu.menu_key)
+                    return (
+                      <label key={menu.menu_key} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${checked ? 'border-ember-300 bg-ember-50/55' : 'hover:bg-muted/30'}`}>
+                        <Checkbox checked={checked} onCheckedChange={(value) => toggleMenu(setEditMenuKeys, menu.menu_key, value === true)} />
+                        <span>
+                          <span className="block text-sm font-medium">{menu.display_name}</span>
+                          <span className="mt-1 block text-xs leading-5 text-muted-foreground">{menu.description}</span>
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border bg-muted/20 p-4 text-sm">该人员类型默认拥有对应组织的全部管理功能。</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)}>取消</Button>
+            <Button disabled={submitting} onClick={() => void saveStaff()}>
+              {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}保存变更
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -420,28 +560,21 @@ export function AccountMembersScreen() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>撤销账号权限</DialogTitle>
-            <DialogDescription>
-              撤销后，该账号下一次业务请求会立即失去当前工作空间的管理权限。
-            </DialogDescription>
+            <DialogDescription>撤销后该账号会立即失去对应组织的后台管理权限。</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="revoke-reason">撤销原因</Label>
             <Textarea id="revoke-reason" value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="staff-confirmation">手机号确认凭证</Label>
-            <Input
-              id="staff-confirmation"
-              value={confirmationToken}
-              onChange={(event) => setConfirmationToken(event.target.value)}
-              placeholder="完成手机号确认后粘贴凭证"
-            />
+            <Label htmlFor="staff-confirmation">安全确认凭证</Label>
+            <Input id="staff-confirmation" value={confirmationToken} onChange={(event) => setConfirmationToken(event.target.value)} placeholder="challenge_id.验证码" />
+            <p className="text-xs text-muted-foreground">为防止误删最后一位管理员，服务端还会进行组织级保护校验。</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRevokeTarget(null)}>取消</Button>
             <Button variant="destructive" disabled={submitting} onClick={() => void revokeStaff()}>
-              {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              确认撤销
+              {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}确认撤销
             </Button>
           </DialogFooter>
         </DialogContent>

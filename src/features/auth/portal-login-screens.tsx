@@ -46,7 +46,7 @@ export function AdminLoginScreen() {
                 portal="admin"
                 eyebrow="平台管理员"
                 title="管理员登录"
-                description="使用已开通平台管理权限的手机号登录。"
+                description="使用已开通的平台管理账号或已验证手机号登录。"
                 submitLabel="进入管理后台"
               />
             </div>
@@ -124,7 +124,7 @@ export function OperatorLoginScreen() {
                 portal="operator"
                 eyebrow="运营账号"
                 title="运营人员登录"
-                description="使用已开通平台运营权限的手机号登录。"
+                description="使用已开通的平台运营账号或已验证手机号登录。"
                 submitLabel="进入运营工作台"
               />
             </div>
@@ -192,7 +192,7 @@ export function ChamberLoginScreen() {
             portal="chamber"
             eyebrow="商会管理员"
             title="进入商会门户"
-            description="使用所属商会为你开通的管理员手机号登录。"
+            description="使用所属商会开通的管理账号或已验证手机号登录。"
             submitLabel="进入商会门户"
           />
         </section>

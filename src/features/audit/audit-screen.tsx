@@ -1,12 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { Activity, CalendarDays, Download, LoaderCircle, Search } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useParams } from 'next/navigation'
+import { Activity, Download, LoaderCircle, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  exportScaffoldedRecords,
-  listScaffoldedRecords,
-  type ScaffoldedRecord,
+  exportManagementAudit,
+  listManagementAudit,
+  listManagementAuditActionTypes,
+  listManagementAuditOperators,
+  type ManagementAuditOperator,
+  type ManagementAuditRecord,
 } from '@/api/client/scaffolded-management'
 import { PageHeading } from '@/components/management/page-heading'
 import { Button } from '@/components/ui/button'
@@ -26,127 +30,233 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-const resource = 'management/audit-logs'
+import { useManagement } from '@/lib/management'
 
 function downloadBlob(blob: Blob) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = 'huameng-audit-logs.csv'
+  anchor.download = `huameng-audit-${new Date().toISOString().slice(0, 10)}.csv`
   anchor.click()
   URL.revokeObjectURL(url)
 }
 
+function dateTime(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+const auditActionLabels: Record<string, string> = {
+  'account.profile_updated': '修改账号资料',
+  'chamber_level.created': '新建会员等级',
+  'chamber_level.update': '更新会员等级',
+  'session.logout': '退出登录',
+  'session.refresh_replayed': '安全会话校验',
+}
+
+const auditObjectLabels: Record<string, string> = {
+  account: '账号',
+  chamber_level: '会员等级',
+  device_session: '登录会话',
+  enterprise: '企业',
+  chamber: '商会',
+  cms_article: '网站内容',
+  product: '商品',
+  plan: '套餐',
+  staff_assignment: '后台人员',
+}
+
+const auditMetadataLabels: Record<string, string> = {
+  display_name: '显示名称',
+  title: '岗位',
+  status: '状态',
+  reason: '操作原因',
+  scope_type: '授权范围',
+  country_code: '国家代码',
+  changed_fields: '变更字段',
+}
+
+function auditActionLabel(action: string) {
+  return auditActionLabels[action] ?? '业务操作'
+}
+
+function auditObjectLabel(objectType: string) {
+  return auditObjectLabels[objectType] ?? '业务对象'
+}
+
+function auditMetadataValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '—'
+  if (Array.isArray(value)) return `${value.length} 项`
+  if (typeof value === 'object') return '已记录'
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  return String(value)
+}
+
 export function AuditScreen() {
+  const params = useParams<{ workspaceId: string }>()
+  const { availableWorkspaces } = useManagement()
+  const workspace = availableWorkspaces.find((item) => item.id === params.workspaceId)
+  const scope = useMemo(() => workspace ? ({
+    scopeType: workspace.kind === 'platform' ? 'platform' as const : 'chamber' as const,
+    scopeId: workspace.kind === 'platform' ? 'hm' : workspace.id,
+  }) : null, [workspace])
   const [keyword, setKeyword] = useState('')
-  const [module, setModule] = useState('all')
+  const [objectType, setObjectType] = useState('all')
   const [action, setAction] = useState('all')
-  const [items, setItems] = useState<ScaffoldedRecord[]>([])
+  const [actor, setActor] = useState('all')
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [items, setItems] = useState<ManagementAuditRecord[]>([])
+  const [actionTypes, setActionTypes] = useState<string[]>([])
+  const [operators, setOperators] = useState<ManagementAuditOperator[]>([])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<unknown>(null)
-  const [selected, setSelected] = useState<ScaffoldedRecord | null>(null)
+  const [selected, setSelected] = useState<ManagementAuditRecord | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const objectTypes = useMemo(
+    () => [...new Set(items.map((item) => item.object_type))],
+    [items],
+  )
+
+  const filters = useMemo(() => scope ? ({
+    ...scope,
+    keyword: keyword.trim() || undefined,
+    objectType: objectType === 'all' ? undefined : objectType,
+    actionPrefix: action === 'all' ? undefined : action,
+    actorAccountId: actor === 'all' ? undefined : actor,
+    start: start ? new Date(start).toISOString() : undefined,
+    end: end ? new Date(end).toISOString() : undefined,
+  }) : null, [action, actor, end, keyword, objectType, scope, start])
 
   const load = useCallback(async () => {
+    if (!filters) return
     setLoading(true)
     setError(null)
     try {
-      const result = await listScaffoldedRecords(resource, {
-        keyword,
-        status: action,
-        limit: 20,
-      })
-      setItems(module === 'all'
-        ? result.items
-        : result.items.filter((item) => item.category === module))
+      const [result, actions, auditOperators] = await Promise.all([
+        listManagementAudit(filters),
+        listManagementAuditActionTypes(filters),
+        listManagementAuditOperators(filters),
+      ])
+      setItems(result.items)
+      setNextCursor(result.next_cursor)
+      setActionTypes(actions)
+      setOperators(auditOperators)
     } catch (nextError) {
       setError(nextError)
     } finally {
       setLoading(false)
     }
-  }, [action, keyword, module])
+  }, [filters])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  async function exportLogs() {
+  async function loadMore() {
+    if (!filters || !nextCursor) return
+    setLoadingMore(true)
     try {
-      const blob = await exportScaffoldedRecords(resource, {
-        ...(keyword ? { keyword } : {}),
-        ...(module !== 'all' ? { module } : {}),
-        ...(action !== 'all' ? { action } : {}),
-      })
-      downloadBlob(blob)
+      const result = await listManagementAudit({ ...filters, cursor: nextCursor })
+      setItems((current) => [...current, ...result.items])
+      setNextCursor(result.next_cursor)
     } catch (nextError) {
-      toast.error(nextError instanceof Error ? nextError.message : '导出失败，请稍后重试')
+      toast.error(nextError instanceof Error ? nextError.message : '下一页读取失败')
+    } finally {
+      setLoadingMore(false)
     }
   }
+
+  async function exportLogs() {
+    if (!filters) return
+    setExporting(true)
+    try {
+      downloadBlob(await exportManagementAudit(filters))
+      toast.success('审计记录已导出')
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : '导出失败，请稍后重试')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  if (!workspace) return null
 
   return (
     <div>
       <PageHeading
         eyebrow="系统"
         title="操作审计"
-        description="按操作人、业务对象和动作追溯管理端变更。审计账只读取服务端真源。"
+        description="在当前唯一企业的实时授权范围内，按操作人、对象、动作和时间追溯服务端审计账。"
         icon={Activity}
         action={
-          <Button variant="outline" onClick={() => void exportLogs()}>
-            <Download className="h-4 w-4" />
+          <Button variant="outline" disabled={exporting} onClick={() => void exportLogs()}>
+            {exporting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             导出审计记录
           </Button>
         }
       />
 
       <Card className="mb-4">
-        <CardContent className="grid gap-3 p-4 lg:grid-cols-[minmax(220px,1fr)_160px_160px_160px_auto]">
-          <div className="relative">
+        <CardContent className="grid gap-3 p-4 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="relative lg:col-span-2">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-9"
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
               onKeyDown={(event) => event.key === 'Enter' && void load()}
-              placeholder="操作人、对象名称或对象编号"
+              placeholder="操作人、对象编号或请求编号"
             />
           </div>
-          <Select value={module} onValueChange={setModule}>
+          <Select value={objectType} onValueChange={setObjectType}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部业务模块</SelectItem>
-              <SelectItem value="enterprise">企业</SelectItem>
-              <SelectItem value="claim">认领审核</SelectItem>
-              <SelectItem value="verification">平台认证</SelectItem>
-              <SelectItem value="staff">账号权限</SelectItem>
-              <SelectItem value="content">网站内容</SelectItem>
+              <SelectItem value="all">全部业务对象</SelectItem>
+              {objectTypes.map((item) => (
+                <SelectItem key={item} value={item}>{auditObjectLabel(item)}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={action} onValueChange={setAction}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部动作</SelectItem>
-              <SelectItem value="create">新建</SelectItem>
-              <SelectItem value="update">修改</SelectItem>
-              <SelectItem value="review">审核</SelectItem>
-              <SelectItem value="publish">发布</SelectItem>
-              <SelectItem value="revoke">撤销</SelectItem>
+              {actionTypes.map((item) => <SelectItem key={item} value={item}>{auditActionLabel(item)}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="outline" className="justify-start font-normal">
-            <CalendarDays className="h-4 w-4" />
-            选择时间范围
-          </Button>
+          <Select value={actor} onValueChange={setActor}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部操作人</SelectItem>
+              {operators.map((item) => (
+                <SelectItem key={item.account_id} value={item.account_id}>{item.display_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={() => void load()}>查询</Button>
+          <div className="lg:col-span-3">
+            <label className="text-xs text-muted-foreground">开始时间</label>
+            <Input type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} />
+          </div>
+          <div className="lg:col-span-3">
+            <label className="text-xs text-muted-foreground">结束时间</label>
+            <Input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} />
+          </div>
         </CardContent>
       </Card>
 
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left">
+            <table className="w-full min-w-[1020px] text-left">
               <thead>
                 <tr className="border-b bg-muted/45 text-[11px] text-muted-foreground">
-                  {['发生时间', '操作人', '业务模块', '动作', '业务对象', '结果', '详情'].map((column) => (
+                  {['发生时间', '操作人', '对象类型', '动作', '业务对象', '原因', '详情'].map((column) => (
                     <th key={column} className="px-5 py-3 font-medium">{column}</th>
                   ))}
                 </tr>
@@ -154,64 +264,75 @@ export function AuditScreen() {
               <tbody className="divide-y">
                 {items.map((item) => (
                   <tr key={item.id} className="text-sm">
-                    <td className="px-5 py-4 text-muted-foreground">{item.created_at ?? '—'}</td>
-                    <td className="px-5 py-4">{item.subtitle ?? '—'}</td>
-                    <td className="px-5 py-4">{item.category ?? '—'}</td>
-                    <td className="px-5 py-4">{item.status}</td>
+                    <td className="px-5 py-4 text-muted-foreground">{dateTime(item.occurred_at)}</td>
                     <td className="px-5 py-4">
-                      <p className="font-medium">{item.title}</p>
-                      <p className="mt-1 font-data text-xs text-muted-foreground">{item.id}</p>
+                      <p>{item.actor_display_name}</p>
                     </td>
-                    <td className="px-5 py-4"><span className="rounded-full border px-2 py-1 text-xs">成功</span></td>
-                    <td className="px-5 py-4">
-                      <Button size="sm" variant="ghost" onClick={() => setSelected(item)}>查看</Button>
-                    </td>
+                    <td className="px-5 py-4">{auditObjectLabel(item.object_type)}</td>
+                    <td className="px-5 py-4">{auditActionLabel(item.action)}</td>
+                    <td className="px-5 py-4 text-muted-foreground">相关{auditObjectLabel(item.object_type)}</td>
+                    <td className="px-5 py-4">{item.reason_code ? '已记录原因' : '—'}</td>
+                    <td className="px-5 py-4"><Button size="sm" variant="ghost" onClick={() => setSelected(item)}>查看</Button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           {loading ? (
-            <div className="grid min-h-72 place-items-center">
-              <LoaderCircle className="h-7 w-7 animate-spin text-ember-600" />
-            </div>
+            <div className="grid min-h-72 place-items-center"><LoaderCircle className="h-7 w-7 animate-spin text-ember-600" /></div>
           ) : error ? (
             <div className="grid min-h-72 place-items-center p-8 text-center">
-              <div className="max-w-lg">
-                <h2 className="text-base font-semibold">无法加载审计记录</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  {error instanceof Error ? error.message : '服务暂时不可用，请稍后重试'}
-                </p>
+              <div>
+                <p className="font-semibold">无法加载审计记录</p>
+                <p className="mt-2 text-sm text-muted-foreground">{error instanceof Error ? error.message : '服务暂时不可用'}</p>
                 <Button className="mt-4" variant="outline" onClick={() => void load()}>重新加载</Button>
               </div>
             </div>
           ) : items.length === 0 ? (
-            <div className="grid min-h-72 place-items-center p-8 text-center">
-              <div className="max-w-lg">
-                <Activity className="mx-auto h-10 w-10 text-muted-foreground" />
-                <h2 className="mt-4 text-base font-semibold">暂无审计记录</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">没有符合当前筛选条件的操作记录。</p>
-              </div>
-            </div>
+            <div className="grid min-h-72 place-items-center text-sm text-muted-foreground">没有符合筛选条件的审计记录。</div>
           ) : null}
-          <div className="border-t px-5 py-3 text-xs text-muted-foreground">共 {items.length} 条审计记录</div>
+          <div className="flex items-center justify-between border-t px-5 py-3 text-xs text-muted-foreground">
+            <span>已加载 {items.length} 条</span>
+            {nextCursor && (
+              <Button variant="outline" size="sm" disabled={loadingMore} onClick={() => void loadMore()}>
+                {loadingMore && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                加载更多
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
       <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>审计记录详情</DialogTitle>
-            <DialogDescription>展示该动作的服务端审计摘要和业务对象。</DialogDescription>
+            <DialogDescription>服务端审计摘要、请求标识和不可变元数据。</DialogDescription>
           </DialogHeader>
           {selected && (
-            <dl className="grid gap-3 rounded-lg border bg-muted/20 p-4 text-sm sm:grid-cols-2">
-              <div><dt className="text-xs text-muted-foreground">记录编号</dt><dd className="mt-1 font-data">{selected.id}</dd></div>
-              <div><dt className="text-xs text-muted-foreground">发生时间</dt><dd className="mt-1">{selected.created_at ?? '—'}</dd></div>
-              <div><dt className="text-xs text-muted-foreground">业务模块</dt><dd className="mt-1">{selected.category ?? '—'}</dd></div>
-              <div><dt className="text-xs text-muted-foreground">动作</dt><dd className="mt-1">{selected.status}</dd></div>
-              <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">业务对象</dt><dd className="mt-1">{selected.title}</dd></div>
-            </dl>
+            <div className="space-y-3">
+              <dl className="grid gap-3 rounded-lg border bg-muted/20 p-4 text-sm sm:grid-cols-2">
+                <div><dt className="text-xs text-muted-foreground">记录编号</dt><dd className="mt-1 font-data">{selected.id}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">序列号</dt><dd className="mt-1 font-data">{selected.sequence}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">请求编号</dt><dd className="mt-1 font-data">{selected.request_id ?? '—'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">企业编号</dt><dd className="mt-1 font-data">{selected.enterprise_id ?? '—'}</dd></div>
+              </dl>
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-semibold">业务变更摘要</p>
+                {Object.keys(selected.metadata).length > 0 ? (
+                  <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {Object.entries(selected.metadata).map(([key, value]) => (
+                      <div key={key} className="rounded-md bg-muted/35 px-3 py-2">
+                        <dt className="text-xs text-muted-foreground">{auditMetadataLabels[key] ?? '补充信息'}</dt>
+                        <dd className="mt-1 text-sm">{auditMetadataValue(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">本次操作没有额外业务变更信息。</p>
+                )}
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -5,7 +5,7 @@ export function customerLoginError(error: unknown) {
     return '暂时无法登录，请稍后重试。'
   }
   if (error.status === 401) {
-    return '手机号或密码不正确，请重新输入。'
+    return '管理账号、手机号或密码不正确，请重新输入。'
   }
   if (error.status === 403) {
     return '当前账号尚未开通管理权限，请联系所属组织管理员。'

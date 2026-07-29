@@ -70,7 +70,6 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
     availableWorkspaces,
     workspaceData,
     logout,
-    switchWorkspace: persistWorkspace,
     refreshWorkspace,
   } = useManagement()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -92,7 +91,7 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (workspace?.kind !== 'chamber') return
     void refreshWorkspace(workspace.id).catch((error) => {
-      toast.error(error instanceof Error ? error.message : '工作空间数据加载失败')
+      toast.error(error instanceof Error ? error.message : '当前组织数据加载失败')
     })
   }, [refreshWorkspace, workspace?.id, workspace?.kind])
   useEffect(() => {
@@ -115,12 +114,25 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
         return item.href === '' ? pathname === `/w/${workspace.id}` : pathname.startsWith(href)
       })
   }, [pathname, visibleNavGroups, workspace])
+  const workspaceRoot = workspace ? `/w/${workspace.id}` : ''
+  const canAccessCurrentRoute = Boolean(
+    workspace
+    && (
+      pathname === workspaceRoot
+      || pathname === `${workspaceRoot}/account`
+      || currentNavItem
+    )
+  )
+  useEffect(() => {
+    if (!hydrated || !currentUser || !workspace || canAccessCurrentRoute) return
+    router.replace(workspaceRoot)
+  }, [canAccessCurrentRoute, currentUser, hydrated, router, workspace, workspaceRoot])
   const pageTitle = pathname.endsWith('/account') ? '账号资料' : currentNavItem?.label ?? '华盟管理台'
 
-  if (!hydrated || !currentUser || !workspace) {
+  if (!hydrated || !currentUser || !workspace || !canAccessCurrentRoute) {
     return (
       <div className="grid min-h-screen place-items-center">
-        <p className="text-sm text-muted-foreground">正在校验管理会话与实时工作空间…</p>
+        <p className="text-sm text-muted-foreground">正在校验管理会话与页面访问权限…</p>
       </div>
     )
   }
@@ -129,16 +141,6 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
     item.status === 'needs_identifier' || item.status === 'conflict'
   )).length ?? 0
   const logoutLoginHref = loginHrefForWorkspaceRole(workspace.role)
-
-  async function switchWorkspace(workspaceId: string) {
-    try {
-      await persistWorkspace(workspaceId)
-      router.push(`/w/${workspaceId}`)
-      toast.success('已切换实时工作空间')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '工作空间切换失败')
-    }
-  }
 
   async function signOut() {
     logoutRedirectRef.current = logoutLoginHref
@@ -158,35 +160,6 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
           </p>
           <p className="mt-2 truncate text-[11px] leading-none tracking-[0.08em] text-muted-foreground">运营管理平台</p>
         </div>
-      </div>
-
-      <div className="px-3 pb-2 pt-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="group flex w-full items-center gap-3 rounded-lg border border-border/70 bg-background/55 px-3 py-3 text-left shadow-[0_1px_2px_rgb(31_32_38/0.035)] transition-[border-color,background-color] hover:border-ember-200 hover:bg-ember-50/45">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-ember-100 bg-ember-50 font-display text-sm font-bold text-ember-700">
-                {workspace.shortName.slice(0, 1)}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[10px] tracking-[0.04em] text-muted-foreground">{workspace.name}</p>
-                <p className="mt-1 truncate text-[13px] font-semibold">{workspace.shortName}</p>
-              </div>
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60 transition-transform group-data-[state=open]:rotate-180" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="right" align="start" className="w-64">
-            <DropdownMenuLabel>切换工作空间</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {availableWorkspaces.map((item) => (
-              <DropdownMenuItem key={item.id} onClick={() => switchWorkspace(item.id)}>
-                <div className="flex flex-col">
-                  <span>{item.name}</span>
-                  <span className="text-xs text-muted-foreground">{roleLabels[item.role]}</span>
-                </div>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
@@ -237,8 +210,22 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
               <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent side="right" align="end" className="w-52">
-            <DropdownMenuLabel>{currentUser.account}</DropdownMenuLabel>
+          <DropdownMenuContent side="right" align="end" className="w-64">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex items-center gap-3 py-1">
+                <Avatar className="h-9 w-9 rounded-md">
+                  <AvatarFallback className="rounded-md border border-ember-200 bg-ember-50 text-xs font-semibold text-ember-700">
+                    {currentUser.avatarText}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-foreground">{currentUser.name}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    {roleLabels[workspace.role]} · {workspace.shortName}
+                  </p>
+                </div>
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push(`/w/${workspace.id}/account`)}>
               <UserRound className="h-4 w-4" />
