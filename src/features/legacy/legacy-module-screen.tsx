@@ -8,7 +8,6 @@ import {
   Boxes,
   Copy,
   Download,
-  FilePenLine,
   Filter,
   Globe2,
   ImagePlus,
@@ -325,7 +324,6 @@ function EmptyTable({
   loadingMore = false,
   hasMore = false,
   error,
-  onCreate,
   onRetry,
   onLoadMore,
   onEdit,
@@ -339,7 +337,6 @@ function EmptyTable({
   loadingMore?: boolean
   hasMore?: boolean
   error: unknown
-  onCreate?: () => void
   onRetry: () => void
   onLoadMore?: () => void
   onEdit: (item: ScaffoldedRecord) => void
@@ -432,14 +429,8 @@ function EmptyTable({
             </span>
             <h2 className="mt-4 text-base font-semibold">暂无{config.noun}</h2>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              没有符合当前筛选条件的记录。你可以调整筛选条件或新建{config.noun}。
+              暂时没有可展示的数据，请调整筛选条件后重试。
             </p>
-            {onCreate && (
-              <Button className="mt-4" variant="outline" onClick={onCreate}>
-                <FilePenLine className="h-4 w-4" />
-                检查新建表单
-              </Button>
-            )}
           </div>
           </div>
         ) : null}
@@ -1829,7 +1820,6 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
             loadingMore={loadingMore}
             hasMore={Boolean(nextCursor)}
             error={error}
-            onCreate={openCreate}
             onRetry={() => void load()}
             onLoadMore={() => void load(nextCursor)}
             onEdit={openEdit}

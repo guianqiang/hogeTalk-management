@@ -983,11 +983,17 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
               </div>
             </div>
           ) : items.length === 0 ? (
-            <div className="grid min-h-72 place-items-center p-8 text-center">
-              <div>
-                <Icon className="mx-auto h-9 w-9 text-muted-foreground" />
-                <h2 className="mt-4 font-semibold">暂无{meta.noun}</h2>
-                <p className="mt-2 text-sm text-muted-foreground">没有符合当前筛选条件的数据。</p>
+            <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
+              <div className="max-w-md">
+                <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl border bg-muted/25 text-muted-foreground">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <h2 className="mt-4 text-base font-semibold">暂无{meta.noun}</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {productModules.has(module)
+                    ? `${meta.noun}由企业端创建并提交，平台后台负责审核、补件和推荐管理。`
+                    : '暂时没有可展示的数据，请调整筛选条件后重试。'}
+                </p>
               </div>
             </div>
           ) : null}
