@@ -161,6 +161,7 @@ export interface ChamberAffiliation {
   status: AffiliationStatus
   joinedAt: string
   platformVerificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected'
+  version: number
 }
 
 export type CertificationStatus = 'active' | 'expired' | 'revoked' | 'inactive_affiliation'

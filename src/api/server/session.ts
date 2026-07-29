@@ -69,7 +69,14 @@ export function validCsrf(request: Request, cookieValue: string | undefined) {
   return Boolean(cookieValue && headerValue && cookieValue === headerValue)
 }
 
-export async function rotateManagementSession(refreshToken: string) {
+type SessionRotationResult = {
+  response: Response
+  session: ManagementAuthSessionDto | null
+}
+
+const sessionRotationFlights = new Map<string, Promise<SessionRotationResult>>()
+
+async function performManagementSessionRotation(refreshToken: string): Promise<SessionRotationResult> {
   const response = await callManagementBackend('/v1/auth/management/refresh', {
     method: 'POST',
     headers: {
@@ -79,7 +86,8 @@ export async function rotateManagementSession(refreshToken: string) {
     },
     body: JSON.stringify({ refresh_token: refreshToken }),
   })
-  if (!response.ok) return { response, session: null }
+  const reusableResponse = response.clone()
+  if (!response.ok) return { response: reusableResponse, session: null }
 
   const payload: unknown = await response.json()
   const parsed = managementAuthSessionSchema.safeParse(payload)
@@ -94,7 +102,26 @@ export async function rotateManagementSession(refreshToken: string) {
       session: null,
     }
   }
-  return { response, session: parsed.data }
+  return { response: reusableResponse, session: parsed.data }
+}
+
+export function rotateManagementSession(refreshToken: string) {
+  const existing = sessionRotationFlights.get(refreshToken)
+  if (existing) {
+    return existing.then((result) => ({ ...result, response: result.response.clone() }))
+  }
+
+  const flight = performManagementSessionRotation(refreshToken)
+  sessionRotationFlights.set(refreshToken, flight)
+  const scheduleRelease = () => {
+    setTimeout(() => {
+      if (sessionRotationFlights.get(refreshToken) === flight) {
+        sessionRotationFlights.delete(refreshToken)
+      }
+    }, 10_000)
+  }
+  void flight.then(scheduleRelease, scheduleRelease)
+  return flight.then((result) => ({ ...result, response: result.response.clone() }))
 }
 
 export function bffErrorResponse(

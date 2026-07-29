@@ -2,18 +2,32 @@ import { describe, expect, it } from 'vitest'
 import {
   chamberAffiliationSchema,
   managementAuthSessionSchema,
+  managementMeSchema,
 } from '@/api/generated/huameng'
 import {
   enterpriseClaimSchema,
   verificationApplicationSchema,
 } from '@/api/generated/huameng-platform'
 import { mapAffiliation, mapWorkspace } from '@/api/mappers/management'
+import { managementAccountDisplayName } from './management'
 import { navigationForWorkspace } from './navigation'
 
 describe('frozen management contract projection', () => {
+  it('uses the saved management account display name instead of the role fallback', () => {
+    expect(managementAccountDisplayName(
+      { display_name: '华盟平台管理员123' },
+      '华盟平台管理员',
+    )).toBe('华盟平台管理员123')
+
+    expect(managementAccountDisplayName(
+      { display_name: '   ' },
+      '华盟平台管理员',
+    )).toBe('华盟平台管理员')
+  })
+
   it('maps chamber workspaces only to W1/W2 capabilities', () => {
     const workspace = mapWorkspace({
-      workspace_id: 'ent_chamber0001',
+      enterprise_id: 'ent_chamber0001',
       membership_id: 'mem_member00001',
       staff_assignment_id: 'sta_staff000001',
       subject_type: 'chamber',
@@ -35,14 +49,14 @@ describe('frozen management contract projection', () => {
       '工作台',
       '会员单位',
       '等级设置',
-      '账号管理',
+      '后台人员',
       '操作审计',
     ])
   })
 
   it('projects the platform admin menu from the documented role template', () => {
     const workspace = mapWorkspace({
-      workspace_id: 'ent_platform0001',
+      enterprise_id: 'ent_platform0001',
       membership_id: 'mem_member00002',
       staff_assignment_id: 'sta_staff000002',
       subject_type: 'platform',
@@ -70,14 +84,14 @@ describe('frozen management contract projection', () => {
     expect(labels).toContain('企业管理')
     expect(labels).toContain('平台认证')
     expect(labels).toContain('认领审核')
-    expect(labels).toContain('账号管理')
+    expect(labels).toContain('后台人员')
     expect(labels).toContain('操作审计')
-    expect(labels).toHaveLength(24)
+    expect(labels).toHaveLength(26)
   })
 
   it('keeps platform operators out of staff management navigation', () => {
     const workspace = mapWorkspace({
-      workspace_id: 'ent_platform0002',
+      enterprise_id: 'ent_platform0002',
       membership_id: 'mem_member00003',
       staff_assignment_id: 'sta_staff000003',
       subject_type: 'platform',
@@ -92,12 +106,16 @@ describe('frozen management contract projection', () => {
       .map((item) => item.label)
 
     expect(labels).toContain('运营概览')
-    expect(labels).toContain('首页管理')
-    expect(labels).toContain('平台认证')
-    expect(labels).toContain('认领审核')
-    expect(labels).not.toContain('账号管理')
+    expect(labels).toContain('新闻中心')
+    expect(labels).toContain('线索管理')
+    expect(labels).toContain('商品分类')
+    expect(labels).not.toContain('后台人员')
+    expect(labels).not.toContain('首页管理')
+    expect(labels).not.toContain('企业管理')
+    expect(labels).not.toContain('认领审核')
+    expect(labels).not.toContain('合作伙伴')
     expect(labels).toContain('操作审计')
-    expect(labels).toHaveLength(23)
+    expect(labels).toHaveLength(15)
   })
 
   it('rejects role or capability claims in a management token response', () => {
@@ -122,6 +140,43 @@ describe('frozen management contract projection', () => {
     expect(result.success).toBe(false)
   })
 
+  it('projects the current single-enterprise management identity', () => {
+    const me = managementMeSchema.parse({
+      account_id: 'acc_account0001',
+      enterprise: {
+        enterprise_id: 'ent_platform0001',
+        membership_id: 'mem_member00001',
+        staff_assignment_id: 'sta_staff000001',
+        subject_type: 'platform',
+        legal_name: '华盟在线平台',
+        display_name: '华盟平台',
+        country_code: 'CN',
+        role_template: 'platform_admin',
+      },
+    })
+
+    expect(me.enterprise.enterprise_id).toBe('ent_platform0001')
+  })
+
+  it('temporarily normalizes the running legacy workspace response to one enterprise', () => {
+    const me = managementMeSchema.parse({
+      account_id: 'acc_account0001',
+      preferred_workspace_id: 'ent_platform0001',
+      workspaces: [{
+        workspace_id: 'ent_platform0001',
+        membership_id: 'mem_member00001',
+        staff_assignment_id: 'sta_staff000001',
+        subject_type: 'platform',
+        legal_name: '华盟在线平台',
+        display_name: '华盟平台',
+        country_code: 'CN',
+        role_template: 'platform_admin',
+      }],
+    })
+
+    expect(me.enterprise.enterprise_id).toBe('ent_platform0001')
+  })
+
   it('preserves the platform-unverified projection on chamber affiliations', () => {
     const dto = chamberAffiliationSchema.parse({
       affiliation_id: 'aff_relation0001',
@@ -131,6 +186,7 @@ describe('frozen management contract projection', () => {
       status: 'active',
       joined_at: '2026-07-25T00:00:00Z',
       platform_verification_status: 'unverified',
+      version: 1,
     })
 
     expect(mapAffiliation(dto).platformVerificationStatus).toBe('unverified')

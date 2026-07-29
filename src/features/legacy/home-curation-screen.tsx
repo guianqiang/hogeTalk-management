@@ -15,6 +15,7 @@ import {
   GraduationCap,
   Handshake,
   Inbox,
+  Images,
   Landmark,
   LayoutTemplate,
   LoaderCircle,
@@ -30,11 +31,16 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
+  actOnPortalHome,
   actOnHomeSectionItem,
+  getHomeBanners,
   getHomeStats,
   listHomeSection,
   reorderHomeSection,
+  saveHomeBanners,
   saveHomeStats,
+  uploadManagementMedia,
+  type HomeBannerRow,
   type HomeStatRow,
   type ScaffoldedRecord,
 } from '@/api/client/scaffolded-management'
@@ -65,9 +71,9 @@ import { cn } from '@/lib/utils'
 const HOME_SECTIONS = [
   { key: 'news', title: '新闻中心', noun: '资讯', module: 'news', icon: Newspaper },
   { key: 'tour', title: '文化旅游', noun: '文旅内容', module: 'tour', icon: MapPinned },
-  { key: 'edu', title: '教育交流', noun: '教育内容', module: 'education', icon: GraduationCap },
-  { key: 'invest', title: '经贸合作', noun: '经贸内容', module: 'investment', icon: Handshake },
-  { key: 'goods', title: '供应链平台', noun: '供应链内容', module: 'supply-chain', icon: PackageSearch },
+  { key: 'education', title: '教育交流', noun: '教育内容', module: 'education', icon: GraduationCap },
+  { key: 'trade', title: '经贸合作', noun: '经贸内容', module: 'investment', icon: Handshake },
+  { key: 'supply', title: '供应链平台', noun: '供应链内容', module: 'supply-chain', icon: PackageSearch },
   { key: 'association', title: '商协会', noun: '商协会内容', module: 'associations', icon: Landmark },
   { key: 'activity', title: '近期活动', noun: '活动', module: 'activities', icon: CalendarDays },
   { key: 'park', title: '东盟园区', noun: '园区内容', module: 'parks', icon: Building2 },
@@ -75,7 +81,7 @@ const HOME_SECTIONS = [
 ] as const
 
 type HomeSection = (typeof HOME_SECTIONS)[number]
-type ActivePanel = 'stats' | HomeSection['key']
+type ActivePanel = 'stats' | 'banners' | HomeSection['key']
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '加载失败，请稍后重试'
@@ -236,6 +242,170 @@ function HomeStatsPanel() {
                 {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 保存统计数字
               </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function HomeBannersPanel() {
+  const [items, setItems] = useState<HomeBannerRow[]>([])
+  const [status, setStatus] = useState<Awaited<ReturnType<typeof getHomeBanners>>['status'] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<unknown>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await getHomeBanners()
+      setItems(result.items)
+      setStatus(result.status)
+    } catch (nextError) {
+      setError(nextError)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  function update(id: string, field: keyof Omit<HomeBannerRow, 'id'>, value: string) {
+    setItems((current) => current.map((item) => item.id === id ? { ...item, [field]: value } : item))
+  }
+
+  async function upload(id: string, file: File) {
+    setBusyId(id)
+    try {
+      const mediaUrl = await uploadManagementMedia(file, 'cms')
+      update(id, 'media_url', mediaUrl)
+      toast.success('轮播图片已上传')
+    } catch (nextError) {
+      toast.error(errorMessage(nextError))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function save() {
+    if (items.some((item) => !item.title.trim() || !item.media_url.trim())) {
+      toast.error('每张轮播都需要标题和图片')
+      return
+    }
+    setSaving(true)
+    try {
+      await saveHomeBanners(items.map((item) => ({
+        ...item,
+        title: item.title.trim(),
+        subtitle: item.subtitle.trim(),
+        media_url: item.media_url.trim(),
+        link_url: item.link_url.trim(),
+      })))
+      await load()
+      toast.success('首页轮播草稿已保存')
+    } catch (nextError) {
+      toast.error(errorMessage(nextError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function publish(action: 'publish' | 'withdraw') {
+    setSaving(true)
+    try {
+      await actOnPortalHome(action)
+      await load()
+      toast.success(action === 'publish' ? '首页当前修订已发布' : '首页发布已撤回')
+    } catch (nextError) {
+      toast.error(errorMessage(nextError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="border-b border-border/70 bg-muted/10 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <Images className="h-4 w-4 text-ember-600" />
+            <CardTitle>首页轮播与发布</CardTitle>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            草稿修订 {status?.current_revision ?? 0} · {status?.published_revision ? `已发布修订 ${status.published_revision}` : '尚未发布'}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setItems((current) => [
+            ...current,
+            { id: clientRowId(), title: '', subtitle: '', media_url: '', link_url: '' },
+          ])}
+        >
+          <Plus className="h-4 w-4" />
+          添加轮播
+        </Button>
+      </CardHeader>
+      <CardContent className="p-5">
+        {loading ? <LoadingState /> : error ? <ErrorState error={error} onRetry={() => void load()} /> : (
+          <>
+            <div className="space-y-4">
+              {items.map((item, index) => (
+                <div key={item.id} className="rounded-lg border p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold">第 {index + 1} 张</p>
+                    <Button variant="ghost" size="icon" onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5"><Label>标题</Label><Input value={item.title} onChange={(event) => update(item.id, 'title', event.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>副标题</Label><Input value={item.subtitle} onChange={(event) => update(item.id, 'subtitle', event.target.value)} /></div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label>轮播图片</Label>
+                      <div className="flex gap-2">
+                        <Input value={item.media_url} readOnly placeholder="上传后生成媒体地址" />
+                        <Button variant="outline" asChild disabled={busyId !== null}>
+                          <label className="cursor-pointer">
+                            {busyId === item.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Images className="h-4 w-4" />}
+                            上传
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="sr-only"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0]
+                                if (file) void upload(item.id, file)
+                              }}
+                            />
+                          </label>
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2"><Label>跳转链接</Label><Input value={item.link_url} onChange={(event) => update(item.id, 'link_url', event.target.value)} placeholder="https://..." /></div>
+                  </div>
+                </div>
+              ))}
+              {items.length === 0 && (
+                <div className="grid min-h-40 place-items-center rounded-lg border border-dashed text-sm text-muted-foreground">暂无轮播图片</div>
+              )}
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2 border-t pt-5">
+              {status?.published_revision && (
+                <Button variant="outline" disabled={saving} onClick={() => void publish('withdraw')}>撤回发布</Button>
+              )}
+              <Button variant="outline" disabled={saving} onClick={() => void save()}>
+                {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
+                保存草稿
+              </Button>
+              <Button disabled={saving || !status} onClick={() => void publish('publish')}>发布当前修订</Button>
             </div>
           </>
         )}
@@ -655,6 +825,7 @@ export function HomeCurationScreen() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="stats">首页顶部 · 统计数字</SelectItem>
+            <SelectItem value="banners">首页顶部 · 轮播与发布</SelectItem>
             {HOME_SECTIONS.map((section, index) => (
               <SelectItem key={section.key} value={section.key}>
                 {index + 1}. {section.title}
@@ -679,6 +850,17 @@ export function HomeCurationScreen() {
           >
             <BarChart3 className="h-4 w-4" />
             <span className="font-medium">统计数字</span>
+          </button>
+          <button
+            type="button"
+            className={cn(
+              'flex w-full items-center gap-3 border-b border-border/70 px-4 py-3 text-left text-sm transition-colors',
+              active === 'banners' ? 'bg-ember-50 text-ember-800' : 'hover:bg-muted/25',
+            )}
+            onClick={() => setActive('banners')}
+          >
+            <Images className="h-4 w-4" />
+            <span className="font-medium">轮播与发布</span>
           </button>
           <div className="border-b border-border/70 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">内容楼层</p>
@@ -722,6 +904,8 @@ export function HomeCurationScreen() {
         <main className="min-w-0">
           {active === 'stats' ? (
             <HomeStatsPanel />
+          ) : active === 'banners' ? (
+            <HomeBannersPanel />
           ) : activeSection ? (
             <HomeSectionPanel
               key={activeSection.key}

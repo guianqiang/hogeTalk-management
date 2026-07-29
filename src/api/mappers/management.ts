@@ -3,7 +3,7 @@ import type {
   ChamberCertificationDto,
   ImportCandidateDto,
   ImportJobDto,
-  ManagementWorkspaceDto,
+  ManagementEnterpriseDto,
 } from '@/api/generated/huameng'
 import type {
   ChamberAffiliation,
@@ -13,7 +13,7 @@ import type {
   Workspace,
 } from '@/lib/types'
 
-export function mapWorkspace(dto: ManagementWorkspaceDto): Workspace {
+export function mapWorkspace(dto: ManagementEnterpriseDto): Workspace {
   const capabilities: Workspace['capabilities'] = dto.subject_type === 'chamber'
     ? [
       'dashboard.read',
@@ -28,7 +28,7 @@ export function mapWorkspace(dto: ManagementWorkspaceDto): Workspace {
       : ['dashboard.read', 'enterprise.verify', 'claim.review', 'duplicate.review', 'dispute.review', 'audit.read']
 
   return {
-    id: dto.workspace_id,
+    id: dto.enterprise_id,
     name: dto.legal_name,
     shortName: dto.display_name,
     kind: dto.subject_type,
@@ -61,6 +61,7 @@ export function mapAffiliation(dto: ChamberAffiliationDto): ChamberAffiliation {
     status: dto.status,
     joinedAt: dto.joined_at,
     platformVerificationStatus: dto.platform_verification_status,
+    version: dto.version,
   }
 }
 

@@ -2,14 +2,17 @@
 
 import { z } from 'zod'
 import {
+  affiliationDetailSchema,
   chamberAffiliationSchema,
   chamberCertificationSchema,
+  certificationLevelSchema,
   errorEnvelopeSchema,
   importCandidateSchema,
   importJobSchema,
+  importRowSchema,
   managementMeSchema,
+  managementPasswordChangeRequiredSchema,
   pageSchema,
-  type ManagementMeDto,
 } from '@/api/generated/huameng'
 import {
   claimReviewResultSchema,
@@ -17,10 +20,10 @@ import {
   duplicateCaseSchema,
   enterpriseClaimSchema,
   ownershipDisputeSchema,
-  permissionCatalogSchema,
+  menuCatalogSchema,
   staffAssignmentSchema,
-  staffInvitationSchema,
   verificationApplicationSchema,
+  type ManagementMenuKey,
   type ClaimStatusDto,
   type VerificationLevelDto,
   type VerificationStatusDto,
@@ -39,6 +42,11 @@ const loginResultSchema = z.object({
   }).strict(),
   expires_in: z.number().int().positive(),
 }).strict()
+
+const loginResponseSchema = z.union([
+  loginResultSchema,
+  managementPasswordChangeRequiredSchema,
+])
 
 type RequestOptions = {
   method?: 'GET' | 'POST'
@@ -85,11 +93,11 @@ function queryString(values: Record<string, string | number | null | undefined>)
   return encoded ? `?${encoded}` : ''
 }
 
-async function request<T>(
+async function request<S extends z.ZodTypeAny>(
   path: string,
-  schema: z.ZodType<T>,
+  schema: S,
   options: RequestOptions = {},
-): Promise<T> {
+): Promise<z.output<S>> {
   const method = options.method ?? 'GET'
   const headers = new Headers({ Accept: 'application/json' })
   if (options.body !== undefined) headers.set('Content-Type', 'application/json')
@@ -141,11 +149,11 @@ async function request<T>(
   return parsed.data
 }
 
-async function readAllPages<T>(
+async function readAllPages<S extends z.ZodTypeAny>(
   path: string,
-  itemSchema: z.ZodType<T>,
-): Promise<T[]> {
-  const items: T[] = []
+  itemSchema: S,
+): Promise<Array<z.output<S>>> {
+  const items: Array<z.output<S>> = []
   let cursor: string | null = null
 
   for (let page = 0; page < 20; page += 1) {
@@ -160,15 +168,44 @@ async function readAllPages<T>(
   return items
 }
 
-export async function loginManagement(phone: string, countryCode: string, password: string) {
-  return request('auth/login', loginResultSchema, {
+export async function loginManagement(identifier: string, countryCode: string, password: string) {
+  return request('auth/login', loginResponseSchema, {
     method: 'POST',
     body: {
-      phone: phone.trim(),
+      identifier: identifier.trim(),
       country_code: countryCode.trim().toUpperCase(),
       password,
     },
   })
+}
+
+export async function completeInitialManagementPassword(
+  passwordChangeToken: string,
+  newPassword: string,
+) {
+  const response = await fetch('/api/management/auth/initial-change', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    cache: 'no-store',
+    body: JSON.stringify({
+      password_change_token: passwordChangeToken,
+      new_password: newPassword,
+    }),
+  })
+  if (response.ok) return
+  const payload: unknown = await response.json().catch(() => null)
+  const parsed = errorEnvelopeSchema.safeParse(payload)
+  if (parsed.success) {
+    throw new ManagementApiError(
+      response.status,
+      parsed.data.error.code,
+      parsed.data.error.message,
+      parsed.data.error.hint,
+      parsed.data.request_id,
+    )
+  }
+  throw new ManagementApiError(response.status, 'E_INITIAL_PASSWORD', '首次密码修改失败', null, null)
 }
 
 export async function logoutManagement() {
@@ -187,14 +224,6 @@ export function getManagementMe() {
   return request('me', managementMeSchema)
 }
 
-export function switchManagementWorkspace(workspaceId: string): Promise<ManagementMeDto> {
-  return request('me/switch-workspace', managementMeSchema, {
-    method: 'POST',
-    body: { workspace_id: workspaceId },
-    idempotencyKey: newIdempotencyKey(),
-  })
-}
-
 export function listChamberAffiliations(chamberId: string) {
   return readAllPages(`chambers/${encodeURIComponent(chamberId)}/affiliations`, chamberAffiliationSchema)
 }
@@ -205,6 +234,137 @@ export function listChamberCertifications(chamberId: string) {
 
 export function listChamberImportCandidates(chamberId: string) {
   return readAllPages(`chambers/${encodeURIComponent(chamberId)}/import-candidates`, importCandidateSchema)
+}
+
+export function listChamberCertificationLevels(chamberId: string, input: {
+  enabled?: boolean
+  cursor?: string | null
+  limit?: number
+} = {}) {
+  return request(
+    `chambers/${encodeURIComponent(chamberId)}/certification-levels${queryString({
+      enabled: input.enabled === undefined ? undefined : String(input.enabled),
+      cursor: input.cursor,
+      limit: input.limit ?? 100,
+      sort: 'sort_order_name',
+    })}`,
+    pageSchema(certificationLevelSchema),
+  )
+}
+
+export function createChamberCertificationLevel(chamberId: string, body: {
+  code: string
+  name: string
+  description?: string
+  sort_order?: number
+  default_valid_days?: number
+  is_default?: boolean
+}) {
+  return request(
+    `chambers/${encodeURIComponent(chamberId)}/certification-levels`,
+    certificationLevelSchema,
+    {
+      method: 'POST',
+      body,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  )
+}
+
+export function actOnChamberCertificationLevel(
+  chamberId: string,
+  levelId: string,
+  body:
+    | {
+      action: 'update'
+      name?: string
+      description?: string
+      sort_order?: number
+      default_valid_days?: number
+      expected_version: number
+    }
+    | { action: 'enable' | 'disable' | 'set_default'; expected_version: number },
+) {
+  return request(
+    `chambers/${encodeURIComponent(chamberId)}/certification-levels/${encodeURIComponent(levelId)}/action`,
+    certificationLevelSchema,
+    {
+      method: 'POST',
+      body,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  )
+}
+
+export function listChamberEnterpriseImportRows(
+  chamberId: string,
+  jobId: string,
+  input: {
+    status?: 'pending' | 'processing' | 'succeeded' | 'candidate' | 'failed' | 'all'
+    cursor?: string | null
+    limit?: number
+  } = {},
+) {
+  return request(
+    `chambers/${encodeURIComponent(chamberId)}/enterprise-imports/${encodeURIComponent(jobId)}/rows${queryString({
+      status: input.status === 'all' ? undefined : input.status,
+      cursor: input.cursor,
+      limit: input.limit ?? 100,
+      sort: 'row_number',
+    })}`,
+    pageSchema(importRowSchema),
+  )
+}
+
+export function getChamberAffiliation(chamberId: string, affiliationId: string) {
+  return request(
+    `chambers/${encodeURIComponent(chamberId)}/affiliations/${encodeURIComponent(affiliationId)}`,
+    affiliationDetailSchema,
+  )
+}
+
+export function createChamberAffiliation(chamberId: string, body: {
+  enterprise_id: string
+  certification_level_code?: string | null
+  valid_from?: string | null
+  valid_until?: string | null
+  reason?: string
+}) {
+  return request(
+    `chambers/${encodeURIComponent(chamberId)}/affiliations`,
+    affiliationDetailSchema,
+    {
+      method: 'POST',
+      body,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  )
+}
+
+export function actOnChamberAffiliation(
+  chamberId: string,
+  affiliationId: string,
+  body:
+    | { action: 'suspend' | 'restore'; reason?: string | null; expected_version: number }
+    | { action: 'end' | 'revoke_certification'; reason: string; expected_version: number }
+    | {
+      action: 'certify' | 'renew_certification'
+      certification_level_code: string
+      valid_from?: string | null
+      valid_until?: string | null
+      reason?: string | null
+      expected_version: number
+    },
+) {
+  return request(
+    `chambers/${encodeURIComponent(chamberId)}/affiliations/${encodeURIComponent(affiliationId)}/action`,
+    affiliationDetailSchema,
+    {
+      method: 'POST',
+      body,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  )
 }
 
 export function getChamberEnterpriseImport(chamberId: string, jobId: string) {
@@ -414,7 +574,7 @@ export function actOnOwnershipDispute(
   )
 }
 
-export function listManagementStaff(workspaceId: string, input: {
+export function listManagementStaff(input: {
   keyword?: string
   status?: 'active' | 'revoked' | 'all'
   roleTemplate?: string | 'all'
@@ -422,7 +582,7 @@ export function listManagementStaff(workspaceId: string, input: {
   limit?: number
 } = {}) {
   return request(
-    `management/workspaces/${encodeURIComponent(workspaceId)}/staff${queryString({
+    `management/staff${queryString({
       keyword: input.keyword?.trim(),
       status: input.status === 'all' ? undefined : input.status,
       role_template: input.roleTemplate === 'all' ? undefined : input.roleTemplate,
@@ -434,33 +594,50 @@ export function listManagementStaff(workspaceId: string, input: {
   )
 }
 
-export function getManagementPermissionCatalog(workspaceId: string) {
+export function getManagementMenuCatalog() {
   return request(
-    `management/permission-catalog${queryString({ workspace_id: workspaceId })}`,
-    permissionCatalogSchema,
+    'management/menu-catalog',
+    menuCatalogSchema,
   )
 }
 
-export function inviteManagementStaff(
-  workspaceId: string,
+export function createManagementStaffAccount(
   body: {
-    destination_type: 'phone'
-    destination: string
+    username: string
     display_name: string
+    initial_password: string
+    phone: string | null
+    country_code: string
     title: string
     role_template: 'platform_admin' | 'platform_operator' | 'chamber_admin'
-    grants: Array<{
-      action: string
-      scope_type: 'platform' | 'country' | 'chamber' | 'enterprise'
-      scope_id: string
-      country_code: string | null
-    }>
-    expires_in_seconds: number
+    menu_keys: ManagementMenuKey[]
   },
 ) {
   return request(
-    `management/workspaces/${encodeURIComponent(workspaceId)}/staff-invitations`,
-    staffInvitationSchema,
+    'management/staff-accounts',
+    staffAssignmentSchema,
+    {
+      method: 'POST',
+      body,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  )
+}
+
+export function createChamberAdminAccount(
+  chamberId: string,
+  body: {
+    username: string
+    display_name: string
+    initial_password: string
+    phone: string | null
+    country_code: string
+    title: string
+  },
+) {
+  return request(
+    `management/chambers/${encodeURIComponent(chamberId)}/admin-accounts`,
+    staffAssignmentSchema,
     {
       method: 'POST',
       body,
@@ -476,17 +653,14 @@ export function updateManagementStaff(
       action: 'update'
       role_template: 'platform_admin' | 'platform_operator' | 'chamber_admin'
       title: string
-      grants: Array<{
-        action: string
-        scope_type: 'platform' | 'country' | 'chamber' | 'enterprise'
-        scope_id: string
-        country_code: string | null
-      }>
+      menu_keys: ManagementMenuKey[]
+      expected_version: number
     }
     | {
       action: 'revoke'
       reason: string
       confirmation_token: string
+      expected_version: number
     },
 ) {
   return request(

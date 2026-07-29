@@ -196,7 +196,7 @@ export function MockManagementProvider({ children }: { children: React.ReactNode
         'membership.invite',
         '账号成员',
         membership.name,
-        `邀请 ${membership.account} 加入工作空间，角色为 ${membership.role}`,
+        `邀请 ${membership.account} 加入当前组织后台，角色为 ${membership.role}`,
       ),
     }))
     return membership

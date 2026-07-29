@@ -13,7 +13,6 @@ import {
 
 const allowedRoutes = [
   { method: 'GET', pattern: /^me$/, backend: (path: string) => `/v1/management/${path}` },
-  { method: 'POST', pattern: /^me\/switch-workspace$/, backend: (path: string) => `/v1/management/${path}` },
   {
     method: 'POST',
     pattern: /^chambers\/ent_[A-Za-z0-9_-]{8,80}\/enterprise-imports$/,
@@ -27,6 +26,36 @@ const allowedRoutes = [
   {
     method: 'GET',
     pattern: /^chambers\/ent_[A-Za-z0-9_-]{8,80}\/(?:import-candidates|affiliations|certifications)$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^chambers\/ent_[A-Za-z0-9_-]{8,80}\/affiliations\/aff_[A-Za-z0-9_-]{8,80}$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^chambers\/ent_[A-Za-z0-9_-]{8,80}\/affiliations$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^chambers\/ent_[A-Za-z0-9_-]{8,80}\/affiliations\/aff_[A-Za-z0-9_-]{8,80}\/action$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^chambers\/ent_[A-Za-z0-9_-]{8,80}\/certification-levels$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^chambers\/ent_[A-Za-z0-9_-]{8,80}\/certification-levels$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^chambers\/ent_[A-Za-z0-9_-]{8,80}\/certification-levels\/(?:lvl|cfl)_[A-Za-z0-9_-]{8,80}\/action$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
@@ -71,17 +100,22 @@ const allowedRoutes = [
   },
   {
     method: 'GET',
-    pattern: /^management\/workspaces\/ent_[A-Za-z0-9_-]{8,80}\/staff$/,
+    pattern: /^management\/staff$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'POST',
-    pattern: /^management\/workspaces\/ent_[A-Za-z0-9_-]{8,80}\/staff-invitations$/,
+    pattern: /^management\/staff-accounts$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'GET',
-    pattern: /^management\/permission-catalog$/,
+    pattern: /^management\/menu-catalog$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/chambers\/ent_[A-Za-z0-9_-]{8,80}\/admin-accounts$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
@@ -91,77 +125,167 @@ const allowedRoutes = [
   },
   {
     method: 'GET',
-    pattern: /^management\/legacy\/[a-z0-9-]+(?:\/export)?$/,
+    pattern: /^management\/account$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'POST',
-    pattern: /^management\/legacy\/[a-z0-9-]+$/,
-    backend: (path: string) => `/v1/${path}`,
-  },
-  {
-    method: 'POST',
-    pattern: /^management\/legacy\/[a-z0-9-]+\/[A-Za-z0-9_-]{1,100}\/action$/,
+    pattern: /^management\/account\/action$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'GET',
-    pattern: /^management\/home\/stats$/,
+    pattern: /^management\/accounts(?:\/stats|\/acc_[A-Za-z0-9_-]{8,80}(?:\/(?:subscription|quota-ledger))?)?$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'POST',
-    pattern: /^management\/home\/stats$/,
+    pattern: /^management\/accounts\/acc_[A-Za-z0-9_-]{8,80}\/(?:action|subscription\/action|quota\/action)$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'GET',
-    pattern: /^management\/home\/sections\/[a-z0-9-]+$/,
-    backend: (path: string) => `/v1/${path}`,
-  },
-  {
-    method: 'POST',
-    pattern: /^management\/home\/sections\/[a-z0-9-]+\/action$/,
-    backend: (path: string) => `/v1/${path}`,
-  },
-  {
-    method: 'POST',
-    pattern: /^management\/home\/sections\/[a-z0-9-]+\/[A-Za-z0-9_-]{1,100}\/action$/,
+    pattern: /^management\/activities(?:\/[A-Za-z][A-Za-z0-9_-]{1,100}(?:\/(?:registrations|minutes-sends))?)?$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'GET',
-    pattern: /^management\/enterprises(?:\/export)?$/,
+    pattern: /^management\/audit-logs(?:\/(?:action-types|operators))?$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'POST',
-    pattern: /^management\/enterprises$/,
-    backend: (path: string) => `/v1/${path}`,
-  },
-  {
-    method: 'POST',
-    pattern: /^management\/enterprises\/ent_[A-Za-z0-9_-]{8,80}\/action$/,
-    backend: (path: string) => `/v1/${path}`,
-  },
-  {
-    method: 'POST',
-    pattern: /^management\/enterprise-imports$/,
+    pattern: /^management\/audit-logs\/export$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'GET',
-    pattern: /^management\/audit-logs(?:\/export)?$/,
+    pattern: /^management\/chambers(?:\/ent_[A-Za-z0-9_-]{8,80})?$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'POST',
-    pattern: /^management\/me\/action$/,
+    pattern: /^management\/chambers$/,
     backend: (path: string) => `/v1/${path}`,
   },
   {
     method: 'POST',
-    pattern: /^auth\/password\/set$/,
+    pattern: /^management\/chambers\/ent_[A-Za-z0-9_-]{8,80}\/action$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^management\/cms\/(?:articles|categories)(?:\/[A-Za-z0-9_-]{1,100})?$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/cms\/(?:articles|categories)$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/cms\/articles\/reorder$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/cms\/(?:articles|categories)\/[A-Za-z0-9_-]{1,100}\/action$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^management\/(?:entitlement-definitions|inquiry-exports)$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^management\/inquiries(?:\/[A-Za-z][A-Za-z0-9_-]{1,100})?$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/inquiries\/[A-Za-z][A-Za-z0-9_-]{1,100}\/action$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^management\/notifications$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/notifications(?:\/ntf_[A-Za-z0-9_-]{8,80})?\/action$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/media\/uploads(?:\/[A-Za-z][A-Za-z0-9_-]{1,100}\/complete)?$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^management\/plans(?:\/[A-Za-z][A-Za-z0-9_-]{1,100})?$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/plans(?:\/[A-Za-z][A-Za-z0-9_-]{1,100}\/action)?$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^management\/portal\/(?:dashboard|home|countries|partners|site-config\/(?:basic|seo|contact|social))$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/portal\/(?:countries|partners)$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/portal\/(?:countries|partners)\/[A-Za-z0-9_-]{1,100}\/action$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/portal\/(?:home|site-config\/(?:basic|seo|contact|social))\/action$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^management\/product-categories$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/product-categories(?:\/[A-Za-z][A-Za-z0-9_-]{1,100}\/action)?$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
+    pattern: /^management\/products(?:\/[A-Za-z][A-Za-z0-9_-]{1,100})?$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/products\/[A-Za-z][A-Za-z0-9_-]{1,100}\/action$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'PUT',
+    pattern: /^management\/portal\/(?:home|site-config\/(?:basic|seo|contact|social))$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'PATCH',
+    pattern: /^management\/chambers\/ent_[A-Za-z0-9_-]{8,80}$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^auth\/management\/password\/set$/,
     backend: (path: string) => `/v1/${path}`,
   },
 ] as const
@@ -253,5 +377,13 @@ export function GET(request: NextRequest, context: Context) {
 }
 
 export function POST(request: NextRequest, context: Context) {
+  return proxy(request, context)
+}
+
+export function PUT(request: NextRequest, context: Context) {
+  return proxy(request, context)
+}
+
+export function PATCH(request: NextRequest, context: Context) {
   return proxy(request, context)
 }

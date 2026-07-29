@@ -3,6 +3,15 @@ import { cn } from '@/lib/utils'
 
 const statusLabels: Record<string, string> = {
   active: '正常',
+  inactive: '已停用',
+  draft: '草稿',
+  published: '已发布',
+  unread: '未读',
+  read: '已读',
+  closed: '已关闭',
+  processing: '处理中',
+  contacted: '已联系',
+  invalid: '无效',
   pending: '待完善',
   suspended: '已暂停',
   revoked: '已撤销',

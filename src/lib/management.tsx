@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { usePathname } from 'next/navigation'
 import {
   createChamberEnterpriseImport,
   getChamberEnterpriseImport,
@@ -17,8 +18,8 @@ import {
   listChamberImportCandidates,
   loginManagement,
   logoutManagement,
-  switchManagementWorkspace,
 } from '@/api/client/management'
+import { getManagementAccount } from '@/api/client/scaffolded-management'
 import {
   mapAffiliation,
   mapCandidate,
@@ -26,6 +27,9 @@ import {
   mapImportJob,
   mapWorkspace,
 } from '@/api/mappers/management'
+import type {
+  ManagementPasswordChangeRequiredDto,
+} from '@/api/generated/huameng'
 import type {
   CreateEnterpriseImportInput,
   ImportJob,
@@ -50,9 +54,14 @@ interface ManagementContextValue {
   availableWorkspaces: Workspace[]
   preferredWorkspaceId: string | null
   workspaceData: Record<string, WorkspaceSnapshot>
-  login: (phone: string, countryCode: string, password: string) => Promise<void>
+  login: (
+    identifier: string,
+    countryCode: string,
+    password: string,
+  ) => Promise<ManagementPasswordChangeRequiredDto | null>
   logout: () => Promise<void>
   switchWorkspace: (workspaceId: string) => Promise<void>
+  refreshAccount: () => Promise<void>
   refreshWorkspace: (workspaceId: string) => Promise<void>
   createEnterpriseImport: (workspaceId: string, input: CreateEnterpriseImportInput) => Promise<ImportJob>
   refreshImportJob: (workspaceId: string, jobId: string) => Promise<ImportJob>
@@ -79,7 +88,18 @@ function fallbackDisplayName(
   return '管理账号'
 }
 
+export function managementAccountDisplayName(
+  account: Record<string, unknown> | null,
+  fallback: string,
+) {
+  const displayName = account?.display_name
+  return typeof displayName === 'string' && displayName.trim()
+    ? displayName.trim()
+    : fallback
+}
+
 export function ManagementProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
   const [hydrated, setHydrated] = useState(false)
   const [currentUser, setCurrentUser] = useState<ManagementUser | null>(null)
   const [availableWorkspaces, setAvailableWorkspaces] = useState<Workspace[]>([])
@@ -133,34 +153,56 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
         [workspaceId]: {
           ...(current[workspaceId] ?? emptySnapshot),
           loading: false,
-          error: error instanceof Error ? error.message : '工作空间数据加载失败',
+          error: error instanceof Error ? error.message : '当前组织数据加载失败',
         },
       }))
       throw error
     }
   }, [availableWorkspaces])
 
-  const bootstrap = useCallback(async (displayName?: string) => {
-    const me = await getManagementMe()
-    const workspaces = me.workspaces.map(mapWorkspace)
-    setCurrentUser(userFromAccount(me.account_id, displayName))
+  const bootstrap = useCallback(async () => {
+    const [me, account] = await Promise.all([
+      getManagementMe(),
+      getManagementAccount().catch(() => null),
+    ])
+    const workspaces = [mapWorkspace(me.enterprise)]
+    setCurrentUser(userFromAccount(
+      me.account_id,
+      managementAccountDisplayName(
+        account,
+        fallbackDisplayName(me.enterprise.role_template),
+      ),
+    ))
     setAvailableWorkspaces(workspaces)
-    setPreferredWorkspaceId(me.preferred_workspace_id)
+    setPreferredWorkspaceId(me.enterprise.enterprise_id)
     setHydrated(true)
     return { me, workspaces }
   }, [])
 
   useEffect(() => {
+    if (pathname === '/login' || pathname.endsWith('/login')) {
+      setCurrentUser(null)
+      setAvailableWorkspaces([])
+      setPreferredWorkspaceId(null)
+      setHydrated(true)
+      return
+    }
     let active = true
-    void getManagementMe()
-      .then((me) => {
+    void Promise.all([
+      getManagementMe(),
+      getManagementAccount().catch(() => null),
+    ])
+      .then(([me, account]) => {
         if (!active) return
         setCurrentUser(userFromAccount(
           me.account_id,
-          fallbackDisplayName(me.workspaces[0]?.role_template),
+          managementAccountDisplayName(
+            account,
+            fallbackDisplayName(me.enterprise.role_template),
+          ),
         ))
-        setAvailableWorkspaces(me.workspaces.map(mapWorkspace))
-        setPreferredWorkspaceId(me.preferred_workspace_id)
+        setAvailableWorkspaces([mapWorkspace(me.enterprise)])
+        setPreferredWorkspaceId(me.enterprise.enterprise_id)
       })
       .catch(() => {
         if (!active) return
@@ -174,12 +216,24 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     return () => {
       active = false
     }
-  }, [])
+  }, [pathname])
 
-  const login = useCallback(async (phone: string, countryCode: string, password: string) => {
-    const result = await loginManagement(phone, countryCode, password)
-    await bootstrap(result.account.display_name)
+  const login = useCallback(async (identifier: string, countryCode: string, password: string) => {
+    const result = await loginManagement(identifier, countryCode, password)
+    if ('next_step' in result) return result
+    await bootstrap()
+    return null
   }, [bootstrap])
+
+  const refreshAccount = useCallback(async () => {
+    const account = await getManagementAccount()
+    setCurrentUser((current) => current
+      ? userFromAccount(
+        current.id,
+        managementAccountDisplayName(account, current.name),
+      )
+      : current)
+  }, [])
 
   const logout = useCallback(async () => {
     try {
@@ -194,10 +248,12 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
   }, [])
 
   const switchWorkspace = useCallback(async (workspaceId: string) => {
-    const me = await switchManagementWorkspace(workspaceId)
-    setAvailableWorkspaces(me.workspaces.map(mapWorkspace))
-    setPreferredWorkspaceId(me.preferred_workspace_id)
-  }, [])
+    const enterprise = availableWorkspaces[0]
+    if (!enterprise || enterprise.id !== workspaceId) {
+      throw new Error('当前账号仅可进入其唯一管理企业')
+    }
+    setPreferredWorkspaceId(enterprise.id)
+  }, [availableWorkspaces])
 
   const createEnterpriseImport = useCallback(async (
     workspaceId: string,
@@ -248,6 +304,7 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     login,
     logout,
     switchWorkspace,
+    refreshAccount,
     refreshWorkspace,
     createEnterpriseImport,
     refreshImportJob,
@@ -259,6 +316,7 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     login,
     logout,
     preferredWorkspaceId,
+    refreshAccount,
     refreshImportJob,
     refreshWorkspace,
     switchWorkspace,

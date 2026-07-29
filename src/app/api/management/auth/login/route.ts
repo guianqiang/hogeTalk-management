@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { managementAuthSessionSchema } from '@/api/generated/huameng'
+import {
+  managementAuthSessionSchema,
+  managementPasswordChangeRequiredSchema,
+} from '@/api/generated/huameng'
 import {
   bffErrorResponse,
   callManagementBackend,
@@ -8,7 +11,7 @@ import {
 } from '@/api/server/session'
 
 const loginRequestSchema = z.object({
-  phone: z.string().min(4).max(32),
+  identifier: z.string().min(4).max(64),
   country_code: z.string().regex(/^[A-Z]{2}$/),
   password: z.string().min(8).max(128),
 }).strict()
@@ -26,7 +29,7 @@ export async function POST(request: Request) {
     return bffErrorResponse(
       422,
       'E_INPUT_INVALID',
-      '手机号、国家代码或密码格式不正确',
+      '管理账号、国家代码或密码格式不正确',
       input.error.issues[0]?.message ?? null,
     )
   }
@@ -45,22 +48,27 @@ export async function POST(request: Request) {
     const payload: unknown = await backend.json()
     if (!backend.ok) return NextResponse.json(payload, { status: backend.status })
 
-    const parsed = managementAuthSessionSchema.safeParse(payload)
-    if (!parsed.success) {
+    const passwordChange = managementPasswordChangeRequiredSchema.safeParse(payload)
+    if (passwordChange.success) {
+      return NextResponse.json(passwordChange.data)
+    }
+
+    const session = managementAuthSessionSchema.safeParse(payload)
+    if (!session.success) {
       return bffErrorResponse(
         502,
         'E_CONTRACT_MISMATCH',
         '管理域登录响应不符合冻结契约',
-        parsed.error.issues[0]?.message ?? null,
+        session.error.issues[0]?.message ?? null,
       )
     }
 
     const response = NextResponse.json({
-      account: parsed.data.account,
-      context: parsed.data.context,
-      expires_in: parsed.data.expires_in,
+      account: session.data.account,
+      context: session.data.context,
+      expires_in: session.data.expires_in,
     })
-    setSessionCookies(response, parsed.data, crypto.randomUUID())
+    setSessionCookies(response, session.data, crypto.randomUUID())
     return response
   } catch {
     return bffErrorResponse(
