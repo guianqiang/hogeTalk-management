@@ -45,6 +45,7 @@ describe('frozen management contract projection', () => {
       'staff.manage',
       'audit.read',
     ])
+    expect(workspace.staffAssignmentId).toBe('sta_staff000001')
     expect(navigationForWorkspace(workspace).flatMap((group) => group.items).map((item) => item.label)).toEqual([
       '工作台',
       '会员单位',

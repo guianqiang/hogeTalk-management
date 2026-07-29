@@ -29,6 +29,7 @@ export function mapWorkspace(dto: ManagementEnterpriseDto): Workspace {
 
   return {
     id: dto.enterprise_id,
+    staffAssignmentId: dto.staff_assignment_id,
     name: dto.legal_name,
     shortName: dto.display_name,
     kind: dto.subject_type,

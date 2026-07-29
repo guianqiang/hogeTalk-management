@@ -284,6 +284,11 @@ export function AccountMembersScreen() {
             <p className="font-semibold">{item.display_name}</p>
             <StatusBadge status={item.status} />
             <span className="text-xs text-muted-foreground">{roleLabels[item.role_template]}</span>
+            {item.staff_assignment_id === workspace.staffAssignmentId && (
+              <span className="rounded-full border border-ember-200 bg-ember-50 px-2 py-0.5 text-[11px] text-ember-700">
+                当前账号
+              </span>
+            )}
             {item.must_change_password && item.status === 'active' && (
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
                 待首次改密
@@ -305,7 +310,7 @@ export function AccountMembersScreen() {
             创建于 {dateTime(item.joined_at)} · 最近活跃 {dateTime(item.last_active_at)}
           </p>
         </div>
-        {item.status === 'active' && (
+        {item.status === 'active' && item.staff_assignment_id !== workspace.staffAssignmentId && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => openEdit(item)}>
               <Pencil className="h-4 w-4" />编辑

@@ -19,6 +19,7 @@ export type Capability =
 
 export interface Workspace {
   id: string
+  staffAssignmentId?: string
   name: string
   shortName: string
   kind: WorkspaceKind
