@@ -53,7 +53,7 @@ const platformNavigation: ManagementNavGroup[] = [
   {
     label: '组织与撮合',
     items: [
-      { href: '/enterprises', label: '企业管理', note: '企业主体与认证状态', icon: 'enterprise', capability: 'dashboard.read', roles: ['platform_admin'] },
+      { href: '/enterprises', label: '企业账号', note: '企业与 App 登录账号', icon: 'enterprise', capability: 'dashboard.read', roles: ['platform_admin'] },
       { href: '/legacy/chambers', label: '商会管理', note: '管理商会主体', icon: 'membership', capability: 'dashboard.read', roles: ['platform_admin'] },
       { href: '/legacy/inquiries', label: '线索管理', note: '管理企业合作线索', icon: 'partner', capability: 'dashboard.read' },
     ],

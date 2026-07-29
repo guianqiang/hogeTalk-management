@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Copy, KeyRound, LoaderCircle, Pencil, Plus, UserRoundCog } from 'lucide-react'
+import { Copy, Eye, KeyRound, LoaderCircle, Pencil, Plus, Search, UserRoundCog } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import {
@@ -77,7 +77,11 @@ export function AccountMembersScreen() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<unknown>(null)
+  const [keywordDraft, setKeywordDraft] = useState('')
   const [keyword, setKeyword] = useState('')
+  const [roleFilter, setRoleFilter] = useState<StaffRoleTemplate | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<'active' | 'revoked' | 'all'>('all')
+  const [detailTarget, setDetailTarget] = useState<StaffAssignmentDto | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createdAccount, setCreatedAccount] = useState<StaffAssignmentDto | null>(null)
   const [username, setUsername] = useState('')
@@ -100,7 +104,12 @@ export function AccountMembersScreen() {
     setError(null)
     try {
       const [staff, menuCatalog] = await Promise.all([
-        listManagementStaff({ keyword, limit: 20 }),
+        listManagementStaff({
+          keyword,
+          roleTemplate: workspace.kind === 'chamber' ? 'chamber_admin' : roleFilter,
+          status: statusFilter,
+          limit: 20,
+        }),
         getManagementMenuCatalog(),
       ])
       setItems(staff.items)
@@ -111,7 +120,7 @@ export function AccountMembersScreen() {
     } finally {
       setLoading(false)
     }
-  }, [keyword, workspace])
+  }, [keyword, roleFilter, statusFilter, workspace])
 
   useEffect(() => {
     void load()
@@ -200,7 +209,13 @@ export function AccountMembersScreen() {
     if (!nextCursor) return
     setLoadingMore(true)
     try {
-      const result = await listManagementStaff({ keyword, cursor: nextCursor, limit: 20 })
+      const result = await listManagementStaff({
+        keyword,
+        roleTemplate: workspace?.kind === 'chamber' ? 'chamber_admin' : roleFilter,
+        status: statusFilter,
+        cursor: nextCursor,
+        limit: 20,
+      })
       setItems((current) => [...current, ...result.items])
       setNextCursor(result.page.next_cursor ?? null)
     } catch (nextError) {
@@ -273,65 +288,6 @@ export function AccountMembersScreen() {
 
   if (!workspace) return null
 
-  const renderStaffCard = (item: StaffAssignmentDto) => (
-    <Card key={item.staff_assignment_id}>
-      <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-ember-100 bg-ember-50 font-semibold text-ember-700">
-          {item.display_name.slice(0, 1)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold">{item.display_name}</p>
-            <StatusBadge status={item.status} />
-            <span className="text-xs text-muted-foreground">{roleLabels[item.role_template]}</span>
-            {item.staff_assignment_id === workspace.staffAssignmentId && (
-              <span className="rounded-full border border-ember-200 bg-ember-50 px-2 py-0.5 text-[11px] text-ember-700">
-                当前账号
-              </span>
-            )}
-            {item.must_change_password && item.status === 'active' && (
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
-                待首次改密
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            登录账号：<span className="font-data text-foreground">{item.username}</span>
-            {item.masked_phone ? ` · ${item.masked_phone}` : ' · 未绑定手机号'}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {staffMenuSummary(item.role_template, item.menu_keys, menuItems).map((summary) => (
-              <span key={summary} className="rounded-full border bg-muted/35 px-2.5 py-1 text-[11px] text-muted-foreground">
-                {summary}
-              </span>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            创建于 {dateTime(item.joined_at)} · 最近活跃 {dateTime(item.last_active_at)}
-          </p>
-        </div>
-        {item.status === 'active' && item.staff_assignment_id !== workspace.staffAssignmentId && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => openEdit(item)}>
-              <Pencil className="h-4 w-4" />编辑
-            </Button>
-            <Button
-              variant="outline"
-              className="text-red-700 hover:text-red-700"
-              onClick={() => {
-                setRevokeTarget(item)
-                setRevokeReason('')
-                setConfirmationToken('')
-              }}
-            >
-              撤销权限
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-
   return (
     <div>
       <PageHeading
@@ -345,45 +301,202 @@ export function AccountMembersScreen() {
       />
 
       <Card className="mb-4">
-        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row">
+        <CardContent className="grid gap-3 p-4 md:grid-cols-[minmax(240px,1fr)_180px_160px_auto]">
           <Input
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && void load()}
+            value={keywordDraft}
+            onChange={(event) => setKeywordDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                setKeyword(keywordDraft.trim())
+                if (keyword === keywordDraft.trim()) void load()
+              }
+            }}
             placeholder="搜索姓名、登录账号或手机号"
-            className="sm:max-w-sm"
           />
-          <Button variant="outline" onClick={() => void load()}>搜索</Button>
+          {workspace.kind === 'platform' ? (
+            <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value as StaffRoleTemplate | 'all')}>
+              <SelectTrigger aria-label="角色类型"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部角色</SelectItem>
+                <SelectItem value="platform_admin">平台管理员</SelectItem>
+                <SelectItem value="platform_operator">运营人员</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="flex h-10 items-center rounded-md border bg-muted/20 px-3 text-sm text-muted-foreground">
+              商会管理员
+            </div>
+          )}
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'active' | 'revoked' | 'all')}>
+            <SelectTrigger aria-label="账号状态"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="active">正常</SelectItem>
+              <SelectItem value="revoked">已撤销</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              variant="outline"
+              onClick={() => {
+                setKeyword(keywordDraft.trim())
+                if (keyword === keywordDraft.trim()) void load()
+              }}
+            >
+              <Search className="h-4 w-4" />查询
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setKeywordDraft('')
+                setKeyword('')
+                setRoleFilter('all')
+                setStatusFilter('all')
+              }}
+            >
+              重置
+            </Button>
+          </div>
         </CardContent>
       </Card>
-
-      <div className="mb-3">
-        <h2 className="font-display text-lg font-semibold">
-          {workspace.kind === 'platform' ? '平台人员' : '商会管理员'}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {workspace.kind === 'platform'
-            ? '平台管理员拥有全部权限，运营人员按左侧业务菜单分配工作范围。'
-            : '商会管理员默认拥有当前商会完整管理权限。'}
-        </p>
-      </div>
 
       {loading ? <QueueLoading /> : error ? (
         <QueueError error={error} onRetry={() => void load()} />
       ) : items.length === 0 ? (
         <QueueEmpty title="当前还没有后台账号" description="新建后账号立即生效，人员首次登录时必须修改初始密码。" />
       ) : (
-        <div className="space-y-3">
-          {items.map((item) => renderStaffCard(item))}
-          {nextCursor && (
-            <div className="flex justify-center pt-2">
-              <Button variant="outline" disabled={loadingMore} onClick={() => void loadMore()}>
-                {loadingMore && <LoaderCircle className="h-4 w-4 animate-spin" />}加载更多人员
-              </Button>
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] text-left">
+                <thead>
+                  <tr className="border-b bg-muted/40 text-[11px] text-muted-foreground">
+                    <th className="px-5 py-3 font-medium">人员</th>
+                    <th className="px-5 py-3 font-medium">登录账号</th>
+                    <th className="px-5 py-3 font-medium">角色类型</th>
+                    <th className="px-5 py-3 font-medium">状态</th>
+                    <th className="px-5 py-3 font-medium">最近活跃</th>
+                    <th className="px-5 py-3 text-right font-medium">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {items.map((item) => (
+                    <tr key={item.staff_assignment_id} className="text-sm transition-colors hover:bg-muted/20">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-ember-100 bg-ember-50 font-semibold text-ember-700">
+                            {item.display_name.slice(0, 1)}
+                          </span>
+                          <div>
+                            <p className="font-medium">{item.display_name}</p>
+                            {item.staff_assignment_id === workspace.staffAssignmentId && (
+                              <p className="mt-0.5 text-[11px] text-ember-700">当前账号</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="font-data">{item.username}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{item.masked_phone || '未绑定手机号'}</p>
+                      </td>
+                      <td className="px-5 py-4">{roleLabels[item.role_template]}</td>
+                      <td className="px-5 py-4"><StatusBadge status={item.status} /></td>
+                      <td className="px-5 py-4 text-muted-foreground">{dateTime(item.last_active_at)}</td>
+                      <td className="px-5 py-4 text-right">
+                        <Button size="sm" variant="ghost" onClick={() => setDetailTarget(item)}>
+                          <Eye className="h-4 w-4" />查看详情
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between border-t px-5 py-3 text-xs text-muted-foreground">
+              <span>当前显示 {items.length} 人</span>
+              {nextCursor && (
+                <Button size="sm" variant="ghost" disabled={loadingMore} onClick={() => void loadMore()}>
+                  {loadingMore && <LoaderCircle className="h-4 w-4 animate-spin" />}加载更多
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={Boolean(detailTarget)} onOpenChange={(open) => !open && setDetailTarget(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>人员详情</DialogTitle>
+            <DialogDescription>查看账号、角色和当前工作范围。</DialogDescription>
+          </DialogHeader>
+          {detailTarget && (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 border-b pb-4">
+                <span className="grid h-11 w-11 place-items-center rounded-xl border border-ember-100 bg-ember-50 text-lg font-semibold text-ember-700">
+                  {detailTarget.display_name.slice(0, 1)}
+                </span>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">{detailTarget.display_name}</p>
+                    <StatusBadge status={detailTarget.status} />
+                    {detailTarget.staff_assignment_id === workspace.staffAssignmentId && (
+                      <span className="rounded-full border border-ember-200 bg-ember-50 px-2 py-0.5 text-[11px] text-ember-700">当前账号</span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{roleLabels[detailTarget.role_template]} · {detailTarget.title}</p>
+                </div>
+              </div>
+              <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                <div><dt className="text-xs text-muted-foreground">登录账号</dt><dd className="font-data mt-1 text-sm">{detailTarget.username}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">登录手机号</dt><dd className="mt-1 text-sm">{detailTarget.masked_phone || '未绑定手机号'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">角色类型</dt><dd className="mt-1 text-sm">{roleLabels[detailTarget.role_template]}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">密码状态</dt><dd className="mt-1 text-sm">{detailTarget.must_change_password ? '首次登录需修改密码' : '正常'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">创建时间</dt><dd className="mt-1 text-sm">{dateTime(detailTarget.joined_at)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">最近活跃</dt><dd className="mt-1 text-sm">{dateTime(detailTarget.last_active_at)}</dd></div>
+              </dl>
+              <div>
+                <p className="text-xs text-muted-foreground">工作范围</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {staffMenuSummary(detailTarget.role_template, detailTarget.menu_keys, menuItems).map((summary) => (
+                    <span key={summary} className="rounded-full border bg-muted/30 px-2.5 py-1 text-xs">{summary}</span>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
-        </div>
-      )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailTarget(null)}>关闭</Button>
+            {detailTarget?.status === 'active' && detailTarget.staff_assignment_id !== workspace.staffAssignmentId && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const target = detailTarget
+                    setDetailTarget(null)
+                    openEdit(target)
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />编辑
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    const target = detailTarget
+                    setDetailTarget(null)
+                    setRevokeTarget(target)
+                    setRevokeReason('')
+                    setConfirmationToken('')
+                  }}
+                >
+                  撤销权限
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={createOpen} onOpenChange={(open) => {
         setCreateOpen(open)

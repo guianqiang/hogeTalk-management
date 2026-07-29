@@ -8,6 +8,7 @@ import {
   Boxes,
   Copy,
   Download,
+  Eye,
   Filter,
   Globe2,
   ImagePlus,
@@ -17,7 +18,7 @@ import {
   Plus,
   Search,
   Settings2,
-  UserPlus,
+  UsersRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -34,7 +35,10 @@ import {
   type ScaffoldedRecord,
   type SiteConfigResponse,
 } from '@/api/client/scaffolded-management'
-import { createChamberAdminAccount } from '@/api/client/management'
+import {
+  createChamberAdminAccount,
+  listChamberAdminAccounts,
+} from '@/api/client/management'
 import type { StaffAssignmentDto } from '@/api/generated/huameng-platform'
 import { PageHeading } from '@/components/management/page-heading'
 import { RichTextEditor } from '@/components/management/rich-text-editor'
@@ -259,6 +263,14 @@ function legacyStatusLabel(status: string) {
   return legacyStatusLabels[status] ?? '待确认'
 }
 
+function staffDateTime(value: string | null | undefined) {
+  if (!value) return '暂无记录'
+  return new Intl.DateTimeFormat('zh-CN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
 function isEnabledRecord(item: ScaffoldedRecord) {
   return item.status === 'published' || item.status === 'active'
 }
@@ -370,8 +382,8 @@ function EmptyTable({
                               <div className="flex justify-end gap-1">
                                 {config.kind === 'organization' && onManageAdmins && (
                                   <Button size="sm" variant="ghost" onClick={() => onManageAdmins(item)}>
-                                    <UserPlus className="h-3.5 w-3.5" />
-                                    管理员
+                                    <UsersRound className="h-3.5 w-3.5" />
+                                    查看管理员
                                   </Button>
                                 )}
                                 <Button size="sm" variant="ghost" onClick={() => onEdit(item)}>
@@ -1612,6 +1624,16 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
   const [organizationReason, setOrganizationReason] = useState('')
   const [organizationSubmitting, setOrganizationSubmitting] = useState(false)
   const [adminChamber, setAdminChamber] = useState<ScaffoldedRecord | null>(null)
+  const [adminView, setAdminView] = useState<'list' | 'detail' | 'create' | 'created'>('list')
+  const [adminItems, setAdminItems] = useState<StaffAssignmentDto[]>([])
+  const [adminListLoading, setAdminListLoading] = useState(false)
+  const [adminListLoadingMore, setAdminListLoadingMore] = useState(false)
+  const [adminListError, setAdminListError] = useState<unknown>(null)
+  const [adminNextCursor, setAdminNextCursor] = useState<string | null>(null)
+  const [adminKeywordDraft, setAdminKeywordDraft] = useState('')
+  const [adminKeyword, setAdminKeyword] = useState('')
+  const [adminStatus, setAdminStatus] = useState<'active' | 'revoked' | 'all'>('all')
+  const [adminDetail, setAdminDetail] = useState<StaffAssignmentDto | null>(null)
   const [adminUsername, setAdminUsername] = useState('')
   const [adminName, setAdminName] = useState('')
   const [adminPhone, setAdminPhone] = useState('')
@@ -1666,13 +1688,57 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
     return `Hm!8${[...values].map((value) => chars[value % chars.length]).join('')}`
   }
 
+  async function loadChamberAdmins(
+    chamber: ScaffoldedRecord,
+    options: {
+      keyword?: string
+      status?: 'active' | 'revoked' | 'all'
+      cursor?: string | null
+    } = {},
+  ) {
+    const cursor = options.cursor ?? null
+    const append = Boolean(cursor)
+    append ? setAdminListLoadingMore(true) : setAdminListLoading(true)
+    if (!append) setAdminListError(null)
+    try {
+      const result = await listChamberAdminAccounts(chamber.id, {
+        keyword: options.keyword ?? adminKeyword,
+        status: options.status ?? adminStatus,
+        cursor,
+        limit: 20,
+      })
+      setAdminItems((current) => append ? [...current, ...result.items] : result.items)
+      setAdminNextCursor(result.page.next_cursor ?? null)
+    } catch (nextError) {
+      if (append) {
+        toast.error(nextError instanceof Error ? nextError.message : '管理员下一页加载失败')
+      } else {
+        setAdminListError(nextError)
+      }
+    } finally {
+      append ? setAdminListLoadingMore(false) : setAdminListLoading(false)
+    }
+  }
+
   function openAdminDialog(chamber: ScaffoldedRecord) {
     setAdminChamber(chamber)
+    setAdminView('list')
+    setAdminDetail(null)
+    setAdminKeywordDraft('')
+    setAdminKeyword('')
+    setAdminStatus('all')
+    setAdminItems([])
+    setAdminNextCursor(null)
+    void loadChamberAdmins(chamber, { keyword: '', status: 'all' })
+  }
+
+  function openCreateAdminDialog() {
     setAdminUsername('')
     setAdminName('')
     setAdminPhone('')
     setAdminPassword(generateAdminPassword())
     setCreatedAdmin(null)
+    setAdminView('create')
   }
 
   async function submitChamberAdmin() {
@@ -1696,6 +1762,11 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
         title: '商会管理员',
       })
       setCreatedAdmin(result)
+      setAdminItems((current) => [
+        result,
+        ...current.filter((item) => item.staff_assignment_id !== result.staff_assignment_id),
+      ])
+      setAdminView('created')
       toast.success('商会管理员账号已创建')
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '商会管理员创建失败')
@@ -1890,18 +1961,186 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
         if (!open) {
           setAdminChamber(null)
           setCreatedAdmin(null)
+          setAdminDetail(null)
         }
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[88vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{createdAdmin ? '商会管理员已创建' : `添加商会管理员`}</DialogTitle>
+            <DialogTitle>
+              {adminView === 'list'
+                ? `${adminChamber?.title ?? '商会'}管理员`
+                : adminView === 'detail'
+                  ? '管理员详情'
+                  : adminView === 'created'
+                    ? '商会管理员已创建'
+                    : '添加商会管理员'}
+            </DialogTitle>
             <DialogDescription>
-              {createdAdmin
-                ? `账号已归属到${adminChamber?.title ?? '所选商会'}，首次登录必须修改初始密码。`
-                : `为${adminChamber?.title ?? '所选商会'}直接创建可用的后台管理员账号。`}
+              {adminView === 'list'
+                ? '查看该商会下的全部后台管理员，支持按姓名、账号、手机号和状态筛选。'
+                : adminView === 'detail'
+                  ? '查看管理员账号、登录状态和使用记录。'
+                  : adminView === 'created'
+                    ? `账号已归属到${adminChamber?.title ?? '所选商会'}，首次登录必须修改初始密码。`
+                    : `为${adminChamber?.title ?? '所选商会'}直接创建可用的后台管理员账号。`}
             </DialogDescription>
           </DialogHeader>
-          {createdAdmin ? (
+          {adminView === 'list' ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 rounded-lg border bg-muted/10 p-3 sm:grid-cols-[minmax(220px,1fr)_160px_auto]">
+                <Input
+                  value={adminKeywordDraft}
+                  onChange={(event) => setAdminKeywordDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && adminChamber) {
+                      const nextKeyword = adminKeywordDraft.trim()
+                      setAdminKeyword(nextKeyword)
+                      void loadChamberAdmins(adminChamber, { keyword: nextKeyword, status: adminStatus })
+                    }
+                  }}
+                  placeholder="搜索姓名、登录账号或手机号"
+                />
+                <Select
+                  value={adminStatus}
+                  onValueChange={(value) => {
+                    const nextStatus = value as 'active' | 'revoked' | 'all'
+                    setAdminStatus(nextStatus)
+                    if (adminChamber) void loadChamberAdmins(adminChamber, { keyword: adminKeyword, status: nextStatus })
+                  }}
+                >
+                  <SelectTrigger aria-label="管理员状态"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部状态</SelectItem>
+                    <SelectItem value="active">正常</SelectItem>
+                    <SelectItem value="revoked">已撤销</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    variant="outline"
+                    onClick={() => {
+                      if (!adminChamber) return
+                      const nextKeyword = adminKeywordDraft.trim()
+                      setAdminKeyword(nextKeyword)
+                      void loadChamberAdmins(adminChamber, { keyword: nextKeyword, status: adminStatus })
+                    }}
+                  >
+                    <Search className="h-4 w-4" />查询
+                  </Button>
+                  <Button onClick={openCreateAdminDialog}><Plus className="h-4 w-4" />新增管理员</Button>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left">
+                    <thead>
+                      <tr className="border-b bg-muted/40 text-[11px] text-muted-foreground">
+                        <th className="px-4 py-3 font-medium">管理员</th>
+                        <th className="px-4 py-3 font-medium">登录账号</th>
+                        <th className="px-4 py-3 font-medium">状态</th>
+                        <th className="px-4 py-3 font-medium">最近活跃</th>
+                        <th className="px-4 py-3 text-right font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {adminItems.map((item) => (
+                        <tr key={item.staff_assignment_id} className="text-sm transition-colors hover:bg-muted/20">
+                          <td className="px-4 py-4 font-medium">{item.display_name}</td>
+                          <td className="px-4 py-4">
+                            <p className="font-data">{item.username}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{item.masked_phone || '未绑定手机号'}</p>
+                          </td>
+                          <td className="px-4 py-4">
+                            <span className="rounded-full border px-2 py-1 text-xs">
+                              {item.status === 'active' ? '正常' : '已撤销'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-muted-foreground">{staffDateTime(item.last_active_at)}</td>
+                          <td className="px-4 py-4 text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setAdminDetail(item)
+                                setAdminView('detail')
+                              }}
+                            >
+                              <Eye className="h-4 w-4" />查看详情
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {adminListLoading ? (
+                  <div className="grid min-h-48 place-items-center"><LoaderCircle className="h-6 w-6 animate-spin text-ember-600" /></div>
+                ) : adminListError ? (
+                  <div className="grid min-h-48 place-items-center p-6 text-center">
+                    <div>
+                      <p className="font-medium">管理员列表加载失败</p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {adminListError instanceof Error ? adminListError.message : '服务暂时不可用'}
+                      </p>
+                      <Button
+                        className="mt-3"
+                        variant="outline"
+                        onClick={() => adminChamber && void loadChamberAdmins(adminChamber)}
+                      >
+                        重新加载
+                      </Button>
+                    </div>
+                  </div>
+                ) : adminItems.length === 0 ? (
+                  <div className="grid min-h-48 place-items-center p-6 text-center">
+                    <div>
+                      <p className="font-medium">暂无管理员</p>
+                      <p className="mt-2 text-sm text-muted-foreground">可新增该商会的第一个后台管理员。</p>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+                  <span>当前显示 {adminItems.length} 人</span>
+                  {adminNextCursor && adminChamber && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={adminListLoadingMore}
+                      onClick={() => void loadChamberAdmins(adminChamber, { cursor: adminNextCursor })}
+                    >
+                      {adminListLoadingMore && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}加载更多
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : adminView === 'detail' && adminDetail ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 border-b pb-4">
+                <span className="grid h-11 w-11 place-items-center rounded-xl border border-ember-100 bg-ember-50 text-lg font-semibold text-ember-700">
+                  {adminDetail.display_name.slice(0, 1)}
+                </span>
+                <div>
+                  <p className="font-semibold">{adminDetail.display_name}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">商会管理员 · {adminDetail.status === 'active' ? '正常' : '已撤销'}</p>
+                </div>
+              </div>
+              <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                <div><dt className="text-xs text-muted-foreground">登录账号</dt><dd className="font-data mt-1 text-sm">{adminDetail.username}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">登录手机号</dt><dd className="mt-1 text-sm">{adminDetail.masked_phone || '未绑定手机号'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">岗位</dt><dd className="mt-1 text-sm">{adminDetail.title}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">密码状态</dt><dd className="mt-1 text-sm">{adminDetail.must_change_password ? '首次登录需修改密码' : '正常'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">创建时间</dt><dd className="mt-1 text-sm">{staffDateTime(adminDetail.joined_at)}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">最近活跃</dt><dd className="mt-1 text-sm">{staffDateTime(adminDetail.last_active_at)}</dd></div>
+              </dl>
+              <div className="rounded-lg border bg-muted/15 p-4">
+                <p className="text-xs text-muted-foreground">管理范围</p>
+                <p className="mt-2 text-sm">所属商会全部后台管理功能</p>
+              </div>
+            </div>
+          ) : adminView === 'created' && createdAdmin ? (
             <div className="rounded-lg border border-ember-200 bg-ember-50/55 p-4">
               <p className="text-sm font-semibold">{createdAdmin.display_name}</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1952,8 +2191,21 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAdminChamber(null)}>{createdAdmin ? '完成' : '取消'}</Button>
-            {!createdAdmin && (
+            {adminView === 'list' ? (
+              <Button variant="outline" onClick={() => setAdminChamber(null)}>关闭</Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAdminDetail(null)
+                  setCreatedAdmin(null)
+                  setAdminView('list')
+                }}
+              >
+                返回管理员列表
+              </Button>
+            )}
+            {adminView === 'create' && (
               <Button disabled={adminSubmitting} onClick={() => void submitChamberAdmin()}>
                 {adminSubmitting && <LoaderCircle className="h-4 w-4 animate-spin" />}创建管理员
               </Button>

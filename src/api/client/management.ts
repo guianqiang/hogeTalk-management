@@ -646,6 +646,27 @@ export function createChamberAdminAccount(
   )
 }
 
+export function listChamberAdminAccounts(
+  chamberId: string,
+  input: {
+    keyword?: string
+    status?: 'active' | 'revoked' | 'all'
+    cursor?: string | null
+    limit?: number
+  } = {},
+) {
+  return request(
+    `management/chambers/${encodeURIComponent(chamberId)}/admin-accounts${queryString({
+      keyword: input.keyword?.trim(),
+      status: input.status === 'all' ? undefined : input.status,
+      cursor: input.cursor,
+      limit: input.limit ?? 20,
+      sort: 'created_desc',
+    })}`,
+    cursorPageSchema(staffAssignmentSchema),
+  )
+}
+
 export function updateManagementStaff(
   staffAssignmentId: string,
   body:

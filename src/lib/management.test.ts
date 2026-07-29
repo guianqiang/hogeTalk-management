@@ -82,7 +82,7 @@ describe('frozen management contract projection', () => {
 
     expect(labels).toContain('运营概览')
     expect(labels).toContain('首页管理')
-    expect(labels).toContain('企业管理')
+    expect(labels).toContain('企业账号')
     expect(labels).toContain('平台认证')
     expect(labels).toContain('认领审核')
     expect(labels).toContain('后台人员')

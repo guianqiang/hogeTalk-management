@@ -119,6 +119,11 @@ const allowedRoutes = [
     backend: (path: string) => `/v1/${path}`,
   },
   {
+    method: 'GET',
+    pattern: /^management\/chambers\/ent_[A-Za-z0-9_-]{8,80}\/admin-accounts$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
     method: 'POST',
     pattern: /^management\/staff\/sta_[A-Za-z0-9_-]{8,80}\/action$/,
     backend: (path: string) => `/v1/${path}`,
