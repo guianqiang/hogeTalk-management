@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, usePathname, useRouter } from 'next/navigation'
 import {
@@ -32,6 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { loginHrefForWorkspaceRole } from '@/features/auth/login-portals'
 import { useManagement } from '@/lib/management'
 import { navigationForWorkspace, type ManagementNavIcon } from '@/lib/navigation'
 import type { WorkspaceRole } from '@/lib/types'
@@ -73,12 +74,13 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
     refreshWorkspace,
   } = useManagement()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const logoutRedirectRef = useRef('/login')
   const workspace = availableWorkspaces.find((item) => item.id === params.workspaceId)
 
   useEffect(() => {
     if (!hydrated) return
     if (!currentUser) {
-      router.replace('/login')
+      router.replace(logoutRedirectRef.current)
       return
     }
     if (!workspace && availableWorkspaces[0]) {
@@ -126,6 +128,7 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
   const pendingCount = workspaceData[workspace.id]?.candidates.filter((item) => (
     item.status === 'needs_identifier' || item.status === 'conflict'
   )).length ?? 0
+  const logoutLoginHref = loginHrefForWorkspaceRole(workspace.role)
 
   async function switchWorkspace(workspaceId: string) {
     try {
@@ -138,10 +141,11 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
+    logoutRedirectRef.current = logoutLoginHref
     try {
       await logout()
     } finally {
-      router.replace('/login')
+      router.replace(logoutLoginHref)
     }
   }
 

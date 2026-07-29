@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loginPortals } from './login-portals'
+import { loginHrefForWorkspaceRole, loginPortals } from './login-portals'
 
 describe('management login portals', () => {
   it('defines one unique entry for every management role', () => {
@@ -15,5 +15,11 @@ describe('management login portals', () => {
     for (const portal of loginPortals) {
       expect(portal.href).toMatch(/^\/(admin|operation|chamber)\/login$/)
     }
+  })
+
+  it('returns each workspace role to its dedicated login entry', () => {
+    expect(loginHrefForWorkspaceRole('platform_admin')).toBe('/admin/login')
+    expect(loginHrefForWorkspaceRole('platform_operator')).toBe('/operation/login')
+    expect(loginHrefForWorkspaceRole('chamber_admin')).toBe('/chamber/login')
   })
 })
