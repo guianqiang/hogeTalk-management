@@ -155,6 +155,26 @@ const allowedRoutes = [
   },
   {
     method: 'GET',
+    pattern: /^management\/enterprises(?:\/export)?$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/enterprises$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/enterprises\/ent_[A-Za-z0-9_-]{8,80}\/action$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
+    pattern: /^management\/enterprise-imports$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'GET',
     pattern: /^management\/activities(?:\/[A-Za-z][A-Za-z0-9_-]{1,100}(?:\/(?:registrations|minutes-sends))?)?$/,
     backend: (path: string) => `/v1/${path}`,
   },

@@ -22,13 +22,6 @@ import { StatusBadge } from '@/components/management/status-badge'
 import { requestManagementResource } from '@/api/client/scaffolded-management'
 import { useManagement } from '@/lib/management'
 import { navigationForWorkspace } from '@/lib/navigation'
-import type { WorkspaceRole } from '@/lib/types'
-
-const roleLabels: Record<WorkspaceRole, string> = {
-  platform_admin: '平台管理员',
-  platform_operator: '平台运营员',
-  chamber_admin: '商会管理员',
-}
 
 function date(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -174,7 +167,7 @@ export function DashboardScreen() {
             </div>
             <h2 className="text-xl font-semibold tracking-[-0.02em] sm:text-2xl">{workspace.name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              {workspace.shortName} · {roleLabels[workspace.role]}
+              {workspace.shortName} · {workspace.staffTitle}
             </p>
           </div>
           {!isPlatform && (
@@ -196,7 +189,7 @@ export function DashboardScreen() {
         </div>
         <div className="grid gap-2 border-t border-border/60 px-5 py-3 text-xs sm:grid-cols-3 sm:px-6">
           <p><span className="text-muted-foreground">管理范围：</span>{isPlatform ? '华盟平台全局' : '当前商会'}</p>
-          <p className="sm:text-center"><span className="text-muted-foreground">当前角色：</span>{roleLabels[workspace.role]}</p>
+          <p className="sm:text-center"><span className="text-muted-foreground">当前岗位：</span>{workspace.staffTitle}</p>
           <p className="sm:text-right"><span className="text-muted-foreground">数据刷新：</span>{snapshot?.updatedAt ? new Date(snapshot.updatedAt).toLocaleTimeString('zh-CN') : '按需加载'}</p>
         </div>
       </section>
@@ -205,7 +198,7 @@ export function DashboardScreen() {
         <>
           <section className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
             {[
-              ['企业账号', 'enterprise_total', '一账号对应一个企业'],
+              ['企业总数', 'enterprise_total', '平台当前企业主体'],
               ['已认证企业', 'verified_enterprise_total', '当前平台认证有效'],
               ['商品总数', 'product_total', `已发布 ${String(platformStats?.published_product_total ?? '—')}`],
               ['待处理事务', 'pending_review_total', `未结线索 ${String(platformStats?.inquiry_open_total ?? '—')}`],

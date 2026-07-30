@@ -36,12 +36,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useManagement } from '@/lib/management'
 
-const roleLabels = {
-  platform_admin: '华盟管理员',
-  platform_operator: '华盟运营',
-  chamber_admin: '商会管理员',
-} as const
-
 interface AccountDetails {
   status: string
   maskedPhone: string
@@ -128,8 +122,8 @@ export function AccountProfileScreen() {
       : 'bg-muted text-muted-foreground'
   const organizationType = workspace.kind === 'platform' ? '华盟平台' : '商会组织'
   const managementScope = workspace.kind === 'platform'
-    ? '可按当前角色处理华盟平台范围内的管理事项'
-    : '仅可管理当前所属商会及其授权业务'
+    ? '可按当前有效菜单处理华盟平台范围内的管理事项'
+    : '仅可管理当前所属商会及后端授予的业务'
   const phoneText = accountLoading
     ? '正在获取…'
     : accountDetails?.maskedPhone || '暂未提供'
@@ -234,7 +228,7 @@ export function AccountProfileScreen() {
                     </span>
                   </div>
                   <p className="mt-1.5 text-sm text-muted-foreground">
-                    {roleLabels[workspace.role]} · {workspace.shortName}
+                    {workspace.staffTitle} · {workspace.shortName}
                   </p>
                 </div>
               </div>
@@ -279,8 +273,8 @@ export function AccountProfileScreen() {
                   <p className="mt-1.5 text-sm font-medium">{organizationType}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">当前角色</p>
-                  <p className="mt-1.5 text-sm font-medium">{roleLabels[workspace.role]}</p>
+                  <p className="text-xs text-muted-foreground">当前岗位</p>
+                  <p className="mt-1.5 text-sm font-medium">{workspace.staffTitle}</p>
                 </div>
               </div>
               <div className="mt-4 flex items-start gap-3 rounded-xl border border-ember-100 bg-ember-50/45 p-4">
@@ -288,7 +282,7 @@ export function AccountProfileScreen() {
                 <div>
                   <p className="text-sm font-medium text-foreground">{managementScope}</p>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    一个账号对应一个所属组织，具体功能权限以当前角色的实时授权为准。
+                    岗位名称仅用于展示；具体功能权限以后端实时授权为准。
                   </p>
                 </div>
               </div>

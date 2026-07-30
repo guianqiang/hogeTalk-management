@@ -8,41 +8,34 @@ import type {
   Workspace,
 } from './types'
 
-const platformCapabilities = [
-  'dashboard.read',
-  'enterprise.read',
-  'enterprise.create',
-  'account_membership.read',
-  'account_membership.invite',
-  'account_membership.manage',
-  'chamber_membership.read',
-  'chamber_membership.review',
-  'chamber_membership.manage',
-  'audit.read',
+const platformMenuKeys = [
+  'dashboard',
+  'enterprise_auth',
+  'chamber_management',
+  'content_management',
+  'product_management',
+  'activity_operations',
+  'inquiry_cooperation',
+  'notification_center',
+  'account_governance',
+  'billing_governance',
+  'audit_export',
 ] as const
 
-const operatorCapabilities = [
-  'dashboard.read',
-  'enterprise.read',
-  'enterprise.create',
-  'account_membership.read',
-  'account_membership.invite',
-  'chamber_membership.read',
-  'chamber_membership.review',
-  'chamber_membership.manage',
-  'audit.read',
+const operatorMenuKeys = [
+  'dashboard',
+  'content_management',
+  'activity_operations',
+  'inquiry_cooperation',
+  'notification_center',
+  'audit_export',
 ] as const
 
-const chamberCapabilities = [
-  'dashboard.read',
-  'enterprise.read',
-  'account_membership.read',
-  'account_membership.invite',
-  'account_membership.manage',
-  'chamber_membership.read',
-  'chamber_membership.review',
-  'chamber_membership.manage',
-  'audit.read',
+const chamberMenuKeys = [
+  'dashboard',
+  'chamber_management',
+  'account_governance',
+  'audit_export',
 ] as const
 
 export const workspaces: Workspace[] = [
@@ -52,7 +45,8 @@ export const workspaces: Workspace[] = [
     shortName: '华盟',
     kind: 'platform',
     role: 'platform_admin',
-    capabilities: [...platformCapabilities],
+    staffTitle: '平台主管',
+    menuKeys: [...platformMenuKeys],
   },
   {
     id: 'chamber-singapore',
@@ -60,7 +54,8 @@ export const workspaces: Workspace[] = [
     shortName: '新商会',
     kind: 'chamber',
     role: 'chamber_admin',
-    capabilities: [...chamberCapabilities],
+    staffTitle: '秘书长',
+    menuKeys: [...chamberMenuKeys],
   },
   {
     id: 'chamber-malaysia',
@@ -68,7 +63,8 @@ export const workspaces: Workspace[] = [
     shortName: '马商会',
     kind: 'chamber',
     role: 'chamber_admin',
-    capabilities: [...chamberCapabilities],
+    staffTitle: '秘书长',
+    menuKeys: [...chamberMenuKeys],
   },
 ]
 
@@ -170,7 +166,8 @@ export function getWorkspacesForUser(userId: string): Workspace[] {
     return [{
       ...workspace,
       role: 'platform_operator' as const,
-      capabilities: [...operatorCapabilities],
+      staffTitle: '内容运营',
+      menuKeys: [...operatorMenuKeys],
     }]
   })
 }

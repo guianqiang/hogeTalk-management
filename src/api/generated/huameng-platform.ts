@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import { managementMenuKeySchema } from './huameng'
+
+export { managementMenuKeySchema } from './huameng'
+export type { ManagementMenuKey } from './huameng'
 
 export const pageMetaSchema = z.object({
   next_cursor: z.string().nullable().optional(),
@@ -140,20 +144,6 @@ export const ownershipDisputeSchema = z.object({
   updated_at: z.string(),
 }).strict()
 
-export const managementMenuKeySchema = z.enum([
-  'dashboard',
-  'enterprise_auth',
-  'chamber_management',
-  'content_management',
-  'product_management',
-  'activity_operations',
-  'inquiry_cooperation',
-  'notification_center',
-  'account_governance',
-  'billing_governance',
-  'audit_export',
-])
-
 const currentStaffAssignmentSchema = z.object({
   staff_assignment_id: z.string(),
   enterprise_id: z.string(),
@@ -193,4 +183,3 @@ export type DuplicateCaseDto = z.infer<typeof duplicateCaseSchema>
 export type OwnershipDisputeDto = z.infer<typeof ownershipDisputeSchema>
 export type StaffAssignmentDto = z.infer<typeof staffAssignmentSchema>
 export type MenuCatalogDto = z.infer<typeof menuCatalogSchema>
-export type ManagementMenuKey = z.infer<typeof managementMenuKeySchema>

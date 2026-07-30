@@ -117,9 +117,9 @@ const moduleMeta: Record<ModuleKey, {
     ],
   },
   accounts: {
-    title: '企业账号管理',
-    description: '查看企业与 App 登录账号；平台人员和商会管理员分别在对应人员入口管理。',
-    noun: '企业账号',
+    title: '账号治理',
+    description: '查看 App 登录账号，管理账号状态、会话和订阅配额。',
+    noun: '账号',
     icon: UsersRound,
     statuses: [
       { value: 'active', label: '正常' },
