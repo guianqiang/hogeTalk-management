@@ -23,6 +23,7 @@ import {
   type ScaffoldedRecord,
 } from '@/api/client/scaffolded-management'
 import { PageHeading } from '@/components/management/page-heading'
+import { PhoneConfirmationField } from '@/components/management/phone-confirmation-field'
 import { StatusBadge } from '@/components/management/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -409,6 +410,16 @@ function ActionPayloadFields({
                 </SelectContent>
               </Select>
             </div>
+          )
+        }
+        if (key === 'confirmation_token') {
+          return (
+            <PhoneConfirmationField
+              key={key}
+              idPrefix="management-action"
+              value={String(value ?? '')}
+              onChange={(nextValue) => onChange(key, nextValue)}
+            />
           )
         }
         const isLongText = key === 'reason' || key === 'description'
@@ -828,7 +839,7 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
       return
     }
     if (typeof payload.confirmation_token === 'string' && payload.confirmation_token.trim().length < 14) {
-      toast.error('请填写本次操作的有效安全确认凭证')
+      toast.error('请完成本次操作的手机验证码确认')
       return
     }
     if (actionName === 'create' && (

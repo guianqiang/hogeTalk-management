@@ -1424,6 +1424,7 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
   const [config, setConfig] = useState<SiteConfigResponse | null>(null)
   const [values, setValues] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
+  const [uploadingSiteLogo, setUploadingSiteLogo] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const loadSettings = useCallback(async (section: SiteConfigResponse['section']) => {
@@ -1501,6 +1502,19 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
     }
   }
 
+  async function uploadSiteLogo(file: File) {
+    setUploadingSiteLogo(true)
+    try {
+      const logoUrl = await uploadManagementMedia(file, 'cms')
+      setValues((current) => ({ ...current, logo_url: logoUrl }))
+      toast.success('站点 Logo 已上传，请保存配置')
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : '站点 Logo 上传失败')
+    } finally {
+      setUploadingSiteLogo(false)
+    }
+  }
+
   async function publicationAction(action: 'publish' | 'withdraw') {
     if (!config) {
       toast.error('请先保存当前配置')
@@ -1559,7 +1573,45 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
                   <Textarea id="site-description" rows={4} {...field('description')} />
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2"><Label htmlFor="site-logo">站点 Logo 媒体地址</Label><Input id="site-logo" {...field('logo_url')} placeholder="hoge-media://hma_xxx" /></div>
+                  <div className="space-y-2">
+                    <Label>站点 Logo</Label>
+                    <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border bg-background px-3">
+                      <span className="text-sm text-muted-foreground">
+                        {values.logo_url ? 'Logo 已上传' : '尚未上传 Logo'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {values.logo_url ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={uploadingSiteLogo || submitting}
+                            onClick={() => setValues((current) => ({ ...current, logo_url: '' }))}
+                          >
+                            移除
+                          </Button>
+                        ) : null}
+                        <label className="inline-flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
+                          {uploadingSiteLogo
+                            ? <LoaderCircle className="h-4 w-4 animate-spin" />
+                            : <ImagePlus className="h-4 w-4" />}
+                          {uploadingSiteLogo ? '上传中' : values.logo_url ? '更换图片' : '上传图片'}
+                          <input
+                            className="sr-only"
+                            type="file"
+                            accept="image/*"
+                            disabled={uploadingSiteLogo || submitting}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0]
+                              if (file) void uploadSiteLogo(file)
+                              event.target.value = ''
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">建议使用透明背景的 PNG 或 SVG 图片。</p>
+                  </div>
                   <div className="space-y-2"><Label htmlFor="site-icp">备案号</Label><Input id="site-icp" {...field('icp_number')} /></div>
                   <div className="space-y-2 sm:col-span-2"><Label htmlFor="site-copyright">版权信息</Label><Input id="site-copyright" {...field('copyright')} /></div>
                 </div>

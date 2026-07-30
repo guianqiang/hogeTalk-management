@@ -9,6 +9,7 @@ import {
 } from '@/api/client/management'
 import type { DuplicateCaseDto } from '@/api/generated/huameng-platform'
 import { PageHeading } from '@/components/management/page-heading'
+import { PhoneConfirmationField } from '@/components/management/phone-confirmation-field'
 import { StatusBadge } from '@/components/management/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -83,7 +84,7 @@ export function DuplicatesScreen() {
       return
     }
     if (action === 'merge' && (!survivorId.trim() || confirmationToken.trim().length < 16)) {
-      toast.error('请选择保留主体并填写有效的确认凭证')
+      toast.error('请选择保留主体并完成手机验证码确认')
       return
     }
 
@@ -205,15 +206,13 @@ export function DuplicatesScreen() {
                   可选：{selected?.source_enterprise_id} 或 {selected?.candidate_enterprise_id}
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="duplicate-confirmation">手机号确认凭证</Label>
-                <Input
-                  id="duplicate-confirmation"
-                  value={confirmationToken}
-                  onChange={(event) => setConfirmationToken(event.target.value)}
-                  placeholder="完成手机号确认后粘贴凭证"
-                />
-              </div>
+              <PhoneConfirmationField
+                idPrefix="duplicate-merge"
+                value={confirmationToken}
+                onChange={setConfirmationToken}
+                disabled={submitting}
+                description="验证码将发送到当前操作人的已验证手机号，用于确认本次企业合并。"
+              />
             </div>
           ) : (
             <div className="space-y-2">

@@ -5,8 +5,10 @@ import { Copy, Eye, KeyRound, LoaderCircle, Pencil, Plus, Search, UserRoundCog }
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import {
+  createChamberAdminAccount,
   createManagementStaffAccount,
   getManagementMenuCatalog,
+  listChamberAdminAccounts,
   listManagementStaff,
   updateManagementStaff,
 } from '@/api/client/management'
@@ -16,6 +18,7 @@ import type {
   StaffAssignmentDto,
 } from '@/api/generated/huameng-platform'
 import { PageHeading } from '@/components/management/page-heading'
+import { PhoneConfirmationField } from '@/components/management/phone-confirmation-field'
 import { StatusBadge } from '@/components/management/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -103,14 +106,21 @@ export function AccountMembersScreen() {
     setLoading(true)
     setError(null)
     try {
-      const [staff, menuCatalog] = await Promise.all([
-        listManagementStaff({
+      const staffRequest = workspace.kind === 'chamber'
+        ? listChamberAdminAccounts(workspace.id, {
           keyword,
-          roleTemplate: workspace.kind === 'chamber' ? 'chamber_admin' : roleFilter,
           status: statusFilter,
           limit: 20,
-        }),
-        getManagementMenuCatalog(),
+        })
+        : listManagementStaff({
+          keyword,
+          roleTemplate: roleFilter,
+          status: statusFilter,
+          limit: 20,
+        })
+      const [staff, menuCatalog] = await Promise.all([
+        staffRequest,
+        workspace.kind === 'platform' ? getManagementMenuCatalog() : Promise.resolve(null),
       ])
       setItems(staff.items)
       setNextCursor(staff.page.next_cursor ?? null)
@@ -184,13 +194,15 @@ export function AccountMembersScreen() {
         country_code: 'CN',
         title: defaultStaffTitle(roleTemplate),
       }
-      const result = await createManagementStaffAccount({
-        ...base,
-        role_template: roleTemplate,
-        menu_keys: roleTemplate === 'platform_operator'
-          ? validOperatorMenuKeys(selectedMenuKeys, menuItems)
-          : [],
-      })
+      const result = workspace?.kind === 'chamber'
+        ? await createChamberAdminAccount(workspace.id, base)
+        : await createManagementStaffAccount({
+          ...base,
+          role_template: roleTemplate,
+          menu_keys: roleTemplate === 'platform_operator'
+            ? validOperatorMenuKeys(selectedMenuKeys, menuItems)
+            : [],
+        })
 
       setCreatedAccount(result)
       setItems((current) => [
@@ -209,13 +221,20 @@ export function AccountMembersScreen() {
     if (!nextCursor) return
     setLoadingMore(true)
     try {
-      const result = await listManagementStaff({
-        keyword,
-        roleTemplate: workspace?.kind === 'chamber' ? 'chamber_admin' : roleFilter,
-        status: statusFilter,
-        cursor: nextCursor,
-        limit: 20,
-      })
+      const result = workspace?.kind === 'chamber'
+        ? await listChamberAdminAccounts(workspace.id, {
+          keyword,
+          status: statusFilter,
+          cursor: nextCursor,
+          limit: 20,
+        })
+        : await listManagementStaff({
+          keyword,
+          roleTemplate: roleFilter,
+          status: statusFilter,
+          cursor: nextCursor,
+          limit: 20,
+        })
       setItems((current) => [...current, ...result.items])
       setNextCursor(result.page.next_cursor ?? null)
     } catch (nextError) {
@@ -263,7 +282,7 @@ export function AccountMembersScreen() {
 
   async function revokeStaff() {
     if (!revokeTarget || !revokeReason.trim() || confirmationToken.trim().length < 6) {
-      toast.error('请填写撤销原因和有效的安全确认凭证')
+      toast.error('请填写撤销原因并完成手机验证码确认')
       return
     }
     setSubmitting(true)
@@ -684,14 +703,20 @@ export function AccountMembersScreen() {
             <Label htmlFor="revoke-reason">撤销原因</Label>
             <Textarea id="revoke-reason" value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="staff-confirmation">安全确认凭证</Label>
-            <Input id="staff-confirmation" value={confirmationToken} onChange={(event) => setConfirmationToken(event.target.value)} placeholder="challenge_id.验证码" />
-            <p className="text-xs text-muted-foreground">为防止误删最后一位管理员，服务端还会进行组织级保护校验。</p>
-          </div>
+          <PhoneConfirmationField
+            idPrefix="staff-revoke"
+            value={confirmationToken}
+            onChange={setConfirmationToken}
+            disabled={submitting}
+            description="验证码只发送到当前操作人的已验证手机号；服务端还会保护组织内最后一位有效管理员。"
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRevokeTarget(null)}>取消</Button>
-            <Button variant="destructive" disabled={submitting} onClick={() => void revokeStaff()}>
+            <Button
+              variant="destructive"
+              disabled={submitting || !revokeReason.trim() || !confirmationToken}
+              onClick={() => void revokeStaff()}
+            >
               {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}确认撤销
             </Button>
           </DialogFooter>

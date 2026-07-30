@@ -48,6 +48,21 @@ const loginResponseSchema = z.union([
   managementPasswordChangeRequiredSchema,
 ])
 
+const managementAuthChallengeSchema = z.object({
+  id: z.string(),
+  purpose: z.enum(['password_reset', 'bind_phone']),
+  masked_destination: z.string(),
+  expires_at: z.string(),
+  resend_after: z.number().int().positive(),
+}).strict()
+
+const accountIdentifierSchema = z.object({
+  id: z.string(),
+  type: z.literal('phone'),
+  masked_value: z.string(),
+  verified_at: z.string(),
+}).strict()
+
 type RequestOptions = {
   method?: 'GET' | 'POST'
   body?: unknown
@@ -222,6 +237,32 @@ export async function logoutManagement() {
 
 export function getManagementMe() {
   return request('me', managementMeSchema)
+}
+
+export function createManagementAuthChallenge(
+  phone: string,
+  purpose: 'password_reset' | 'bind_phone' = 'password_reset',
+) {
+  return request('auth/management/challenges', managementAuthChallengeSchema, {
+    method: 'POST',
+    body: {
+      purpose,
+      phone: phone.trim(),
+      country_code: 'CN',
+      locale: 'zh-CN',
+      risk_token: '',
+    },
+  })
+}
+
+export function verifyManagementPhone(challengeId: string, code: string) {
+  return request('auth/management/phone/verify', accountIdentifierSchema, {
+    method: 'POST',
+    body: {
+      challenge_id: challengeId,
+      code,
+    },
+  })
 }
 
 export function listChamberAffiliations(chamberId: string) {

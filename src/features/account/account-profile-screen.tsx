@@ -14,12 +14,14 @@ import {
 } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
+import { verifyManagementPhone } from '@/api/client/management'
 import {
   changeManagementPassword,
   getManagementAccount,
   updateManagementProfile,
 } from '@/api/client/scaffolded-management'
 import { PageHeading } from '@/components/management/page-heading'
+import { PhoneConfirmationField } from '@/components/management/phone-confirmation-field'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -67,10 +69,12 @@ export function AccountProfileScreen() {
   const workspace = availableWorkspaces.find((item) => item.id === params.workspaceId)
   const [editOpen, setEditOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
+  const [phoneOpen, setPhoneOpen] = useState(false)
   const [displayName, setDisplayName] = useState(currentUser?.name ?? '')
   const [savedDisplayName, setSavedDisplayName] = useState(currentUser?.name ?? '')
   const [newPassword, setNewPassword] = useState('')
   const [confirmationToken, setConfirmationToken] = useState('')
+  const [phoneConfirmationToken, setPhoneConfirmationToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [accountDetails, setAccountDetails] = useState<AccountDetails | null>(null)
   const [accountLoading, setAccountLoading] = useState(true)
@@ -156,7 +160,7 @@ export function AccountProfileScreen() {
 
   async function changePassword() {
     if (newPassword.length < 12 || !confirmationToken.trim()) {
-      toast.error('请填写至少 12 位新密码和安全确认凭证')
+      toast.error('请填写至少 12 位新密码并完成手机验证码确认')
       return
     }
     setSubmitting(true)
@@ -166,6 +170,32 @@ export function AccountProfileScreen() {
       window.location.assign('/login')
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '修改密码失败，请稍后重试')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function bindPhone() {
+    const [challengeId, code] = phoneConfirmationToken.split('.', 2)
+    if (!challengeId || !/^\d{4,8}$/.test(code ?? '')) {
+      toast.error('请先完成手机号验证码确认')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const result = await verifyManagementPhone(challengeId, code)
+      setAccountDetails((current) => current
+        ? { ...current, maskedPhone: result.masked_value }
+        : {
+          status: 'active',
+          maskedPhone: result.masked_value,
+          createdAt: null,
+        })
+      setPhoneOpen(false)
+      setPhoneConfirmationToken('')
+      toast.success('登录手机号已完成验证')
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : '手机号验证失败')
     } finally {
       setSubmitting(false)
     }
@@ -280,8 +310,36 @@ export function AccountProfileScreen() {
                 <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
                   修改密码后，现有管理会话将失效，需要使用新密码重新登录。
                 </p>
-                <Button className="mt-4" size="sm" variant="outline" onClick={() => setPasswordOpen(true)}>
+                <Button
+                  className="mt-4"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setNewPassword('')
+                    setConfirmationToken('')
+                    setPasswordOpen(true)
+                  }}
+                >
                   修改密码
+                </Button>
+              </div>
+              <div className="mt-3 rounded-xl border p-4">
+                <p className="text-sm font-medium">登录手机号</p>
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                  {accountDetails?.maskedPhone
+                    ? `当前已验证手机号：${accountDetails.maskedPhone}`
+                    : '当前账号尚未绑定手机号，敏感操作和手机号登录将无法完成。'}
+                </p>
+                <Button
+                  className="mt-4"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setPhoneConfirmationToken('')
+                    setPhoneOpen(true)
+                  }}
+                >
+                  {accountDetails?.maskedPhone ? '验证新手机号' : '绑定手机号'}
                 </Button>
               </div>
               <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50/70 px-3.5 py-3 text-xs text-emerald-800">
@@ -337,21 +395,49 @@ export function AccountProfileScreen() {
                 placeholder="至少 12 位，包含字母、数字和符号"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="profile-confirmation">安全确认凭证</Label>
-              <Input
-                id="profile-confirmation"
-                value={confirmationToken}
-                onChange={(event) => setConfirmationToken(event.target.value)}
-                placeholder="完成手机号确认后填写"
-              />
-            </div>
+            <PhoneConfirmationField
+              idPrefix="profile-password"
+              value={confirmationToken}
+              onChange={setConfirmationToken}
+              disabled={submitting}
+              description="验证码只发送到当前账号已验证的手机号；填写完成后即可修改密码。"
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPasswordOpen(false)}>取消</Button>
-            <Button disabled={submitting} onClick={() => void changePassword()}>
+            <Button
+              disabled={submitting || newPassword.length < 12 || !confirmationToken}
+              onClick={() => void changePassword()}
+            >
               {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
               修改密码
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={phoneOpen} onOpenChange={setPhoneOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{accountDetails?.maskedPhone ? '验证新手机号' : '绑定登录手机号'}</DialogTitle>
+            <DialogDescription>
+              验证成功后可使用该手机号登录，并可接收敏感操作的安全验证码。
+            </DialogDescription>
+          </DialogHeader>
+          <PhoneConfirmationField
+            idPrefix="profile-phone-bind"
+            purpose="bind_phone"
+            value={phoneConfirmationToken}
+            onChange={setPhoneConfirmationToken}
+            disabled={submitting}
+            label="待验证手机号"
+            description="验证码将发送到下面填写的手机号，验证成功后绑定到当前管理账号。"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPhoneOpen(false)}>取消</Button>
+            <Button disabled={submitting || !phoneConfirmationToken} onClick={() => void bindPhone()}>
+              {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              完成验证
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -15,6 +15,11 @@ const allowedRoutes = [
   { method: 'GET', pattern: /^me$/, backend: (path: string) => `/v1/management/${path}` },
   {
     method: 'POST',
+    pattern: /^auth\/management\/(?:challenges|phone\/verify)$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
     pattern: /^chambers\/ent_[A-Za-z0-9_-]{8,80}\/enterprise-imports$/,
     backend: (path: string) => `/v1/${path}`,
   },
