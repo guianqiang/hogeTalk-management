@@ -55,6 +55,67 @@ const roleLabels: Record<StaffRoleTemplate, string> = {
   chamber_admin: '商会管理员',
 }
 
+const websiteContentSubMenuKeys = new Set<ManagementMenuKey>([
+  'content_home',
+  'content_news',
+  'content_tour',
+  'content_education',
+  'content_investment',
+  'content_supply_chain',
+  'content_associations',
+  'content_activities',
+  'content_parks',
+  'content_article_categories',
+  'content_countries',
+  'content_site_settings',
+])
+
+function MenuScopeSelector({
+  items,
+  selectedKeys,
+  onToggle,
+}: {
+  items: MenuCatalogDto['items']
+  selectedKeys: ManagementMenuKey[]
+  onToggle: (key: ManagementMenuKey, checked: boolean) => void
+}) {
+  const primaryItems = items.filter((item) => !websiteContentSubMenuKeys.has(item.menu_key))
+  const contentItems = items.filter((item) => websiteContentSubMenuKeys.has(item.menu_key))
+
+  function option(item: MenuCatalogDto['items'][number], nested = false) {
+    const checked = selectedKeys.includes(item.menu_key)
+    return (
+      <label
+        key={item.menu_key}
+        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${nested ? 'bg-background' : ''} ${checked ? 'border-ember-300 bg-ember-50/55' : 'hover:bg-muted/30'}`}
+      >
+        <Checkbox checked={checked} onCheckedChange={(value) => onToggle(item.menu_key, value === true)} />
+        <span>
+          <span className="block text-sm font-medium">{item.display_name}</span>
+          <span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.description}</span>
+        </span>
+      </label>
+    )
+  }
+
+  return (
+    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {primaryItems.map((item) => option(item))}
+      {contentItems.length > 0 && (
+        <div className="space-y-3 rounded-xl border border-ember-100 bg-ember-50/25 p-3 sm:col-span-2">
+          <div>
+            <p className="text-sm font-semibold">网站内容子权限</p>
+            <p className="mt-1 text-xs text-muted-foreground">旅游、教育和供应链可以独立授权，不必开放全部网站内容。</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {contentItems.map((item) => option(item, true))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function dateTime(value: string | null | undefined) {
   if (!value) return '暂无记录'
   return new Intl.DateTimeFormat('zh-CN', {
@@ -153,9 +214,19 @@ export function AccountMembersScreen() {
     key: ManagementMenuKey,
     checked: boolean,
   ) {
-    setter((current) => checked
-      ? [...new Set([...current, key])]
-      : current.filter((item) => item !== key))
+    setter((current) => {
+      if (key === 'content_management') {
+        return checked
+          ? [...new Set([...current, key, ...websiteContentSubMenuKeys])]
+          : current.filter((item) => item !== key && !websiteContentSubMenuKeys.has(item))
+      }
+      if (!checked && websiteContentSubMenuKeys.has(key)) {
+        return current.filter((item) => item !== key && item !== 'content_management')
+      }
+      return checked
+        ? [...new Set([...current, key])]
+        : current.filter((item) => item !== key)
+    })
   }
 
   async function submitCreate() {
@@ -588,20 +659,11 @@ export function AccountMembersScreen() {
                 <div>
                   <Label>可见菜单</Label>
                   <p className="mt-1 text-xs text-muted-foreground">与左侧菜单保持一致，选中后系统自动配置对应业务权限。</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {menuItems.map((menu) => {
-                      const checked = selectedMenuKeys.includes(menu.menu_key)
-                      return (
-                        <label key={menu.menu_key} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${checked ? 'border-ember-300 bg-ember-50/55' : 'hover:bg-muted/30'}`}>
-                          <Checkbox checked={checked} onCheckedChange={(value) => toggleMenu(setSelectedMenuKeys, menu.menu_key, value === true)} />
-                          <span>
-                            <span className="block text-sm font-medium">{menu.display_name}</span>
-                            <span className="mt-1 block text-xs leading-5 text-muted-foreground">{menu.description}</span>
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
+                  <MenuScopeSelector
+                    items={menuItems}
+                    selectedKeys={selectedMenuKeys}
+                    onToggle={(key, checked) => toggleMenu(setSelectedMenuKeys, key, checked)}
+                  />
                 </div>
               ) : (
                 <div className="rounded-lg border border-ember-200 bg-ember-50/45 p-4">
@@ -649,20 +711,11 @@ export function AccountMembersScreen() {
             {editRole === 'platform_operator' ? (
               <div>
                 <Label>可见菜单</Label>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {menuItems.map((menu) => {
-                    const checked = editMenuKeys.includes(menu.menu_key)
-                    return (
-                      <label key={menu.menu_key} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${checked ? 'border-ember-300 bg-ember-50/55' : 'hover:bg-muted/30'}`}>
-                        <Checkbox checked={checked} onCheckedChange={(value) => toggleMenu(setEditMenuKeys, menu.menu_key, value === true)} />
-                        <span>
-                          <span className="block text-sm font-medium">{menu.display_name}</span>
-                          <span className="mt-1 block text-xs leading-5 text-muted-foreground">{menu.description}</span>
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
+                <MenuScopeSelector
+                  items={menuItems}
+                  selectedKeys={editMenuKeys}
+                  onToggle={(key, checked) => toggleMenu(setEditMenuKeys, key, checked)}
+                />
               </div>
             ) : (
               <div className="rounded-lg border bg-muted/20 p-4 text-sm">该人员类型默认拥有对应组织的全部管理功能。</div>

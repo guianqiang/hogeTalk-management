@@ -39,15 +39,15 @@ const platformNavigation: ManagementNavGroup[] = [
   {
     label: '网站内容',
     items: [
-      { href: '/legacy/home', label: '首页管理', note: '管理首页内容', icon: 'content', menuKey: 'content_management' },
-      { href: '/legacy/news', label: '新闻中心', note: '管理新闻资讯', icon: 'content', menuKey: 'content_management' },
-      { href: '/legacy/tour', label: '文化旅游', note: '管理文旅内容', icon: 'content', menuKey: 'content_management' },
-      { href: '/legacy/education', label: '教育交流', note: '管理教育交流内容', icon: 'content', menuKey: 'content_management' },
-      { href: '/legacy/investment', label: '经贸合作', note: '管理经贸合作内容', icon: 'content', menuKey: 'content_management' },
-      { href: '/legacy/supply-chain', label: '供应链平台', note: '管理供应链内容', icon: 'enterprise', menuKey: 'content_management' },
-      { href: '/legacy/associations', label: '商协会', note: '管理商协会内容', icon: 'membership', menuKey: 'content_management' },
-      { href: '/legacy/activities', label: '近期活动', note: '管理活动信息', icon: 'content', menuKey: 'content_management' },
-      { href: '/legacy/parks', label: '东盟园区', note: '管理园区内容', icon: 'enterprise', menuKey: 'content_management' },
+      { href: '/legacy/home', label: '首页管理', note: '管理首页内容', icon: 'content', menuKey: 'content_home' },
+      { href: '/legacy/news', label: '新闻中心', note: '管理新闻资讯', icon: 'content', menuKey: 'content_news' },
+      { href: '/legacy/tour', label: '文化旅游', note: '管理文旅内容', icon: 'content', menuKey: 'content_tour' },
+      { href: '/legacy/education', label: '教育交流', note: '管理教育交流内容', icon: 'content', menuKey: 'content_education' },
+      { href: '/legacy/investment', label: '经贸合作', note: '管理经贸合作内容', icon: 'content', menuKey: 'content_investment' },
+      { href: '/legacy/supply-chain', label: '供应链平台', note: '管理供应链内容', icon: 'enterprise', menuKey: 'content_supply_chain' },
+      { href: '/legacy/associations', label: '商协会', note: '管理商协会内容', icon: 'membership', menuKey: 'content_associations' },
+      { href: '/legacy/activities', label: '近期活动', note: '管理活动信息', icon: 'content', menuKey: 'content_activities' },
+      { href: '/legacy/parks', label: '东盟园区', note: '管理园区内容', icon: 'enterprise', menuKey: 'content_parks' },
     ],
   },
   {
@@ -72,9 +72,9 @@ const platformNavigation: ManagementNavGroup[] = [
     items: [
       { href: '/legacy/partners', label: '合作伙伴', note: '管理合作伙伴', icon: 'partner', menuKey: 'inquiry_cooperation' },
       { href: '/legacy/product-categories', label: '商品分类', note: '管理商品分类', icon: 'content', menuKey: 'product_management' },
-      { href: '/legacy/article-categories', label: '资讯栏目', note: '管理资讯栏目', icon: 'content', menuKey: 'content_management' },
-      { href: '/legacy/countries', label: '国家管理', note: '管理国家与地区', icon: 'globe', menuKey: 'content_management' },
-      { href: '/legacy/site-settings', label: '站点配置', note: '管理站点设置', icon: 'settings', menuKey: 'content_management' },
+      { href: '/legacy/article-categories', label: '资讯栏目', note: '管理资讯栏目', icon: 'content', menuKey: 'content_article_categories' },
+      { href: '/legacy/countries', label: '国家管理', note: '管理国家与地区', icon: 'globe', menuKey: 'content_countries' },
+      { href: '/legacy/site-settings', label: '站点配置', note: '管理站点设置', icon: 'settings', menuKey: 'content_site_settings' },
     ],
   },
   {

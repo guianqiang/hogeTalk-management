@@ -14,6 +14,21 @@ import { mapAffiliation, mapWorkspace } from '@/api/mappers/management'
 import { managementAccountDisplayName } from './management'
 import { navigationForWorkspace } from './navigation'
 
+const websiteContentMenuKeys = [
+  'content_home',
+  'content_news',
+  'content_tour',
+  'content_education',
+  'content_investment',
+  'content_supply_chain',
+  'content_associations',
+  'content_activities',
+  'content_parks',
+  'content_article_categories',
+  'content_countries',
+  'content_site_settings',
+] as const
+
 describe('frozen management contract projection', () => {
   it('accepts the real personnel and chamber administrator response including grants', () => {
     const result = cursorPageSchema(staffAssignmentSchema).parse({
@@ -110,6 +125,7 @@ describe('frozen management contract projection', () => {
         'enterprise_auth',
         'chamber_management',
         'content_management',
+        ...websiteContentMenuKeys,
         'product_management',
         'inquiry_cooperation',
         'account_governance',
@@ -146,6 +162,7 @@ describe('frozen management contract projection', () => {
       title: '内容运营',
       menu_keys: [
         'content_management',
+        ...websiteContentMenuKeys,
         'audit_export',
       ],
     })
@@ -230,6 +247,7 @@ describe('frozen management contract projection', () => {
           'enterprise_auth',
           'chamber_management',
           'content_management',
+          ...websiteContentMenuKeys,
           'product_management',
           'inquiry_cooperation',
           'account_governance',
@@ -283,6 +301,7 @@ describe('frozen management contract projection', () => {
           'enterprise_auth',
           'chamber_management',
           'content_management',
+          ...websiteContentMenuKeys,
           'product_management',
           'inquiry_cooperation',
           'account_governance',
