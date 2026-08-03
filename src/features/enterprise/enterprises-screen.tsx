@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import {
-  actOnChamberAffiliation,
-  createChamberAffiliation,
+  createChamberEnterprise,
+  deleteChamberEnterprise,
   listChamberCertificationLevels,
   listChamberEnterpriseImportRows,
+  setChamberEnterpriseLevel,
+  updateChamberEnterprise,
 } from '@/api/client/management'
 import type {
   CertificationLevelDto,
@@ -19,8 +21,11 @@ import {
   Download,
   FileSpreadsheet,
   LoaderCircle,
+  Pencil,
+  Plus,
   RefreshCcw,
   Search,
+  Trash2,
   TriangleAlert,
   Upload,
 } from 'lucide-react'
@@ -41,6 +46,8 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { CountrySelect } from '@/components/management/country-select'
+import { DateTimeField } from '@/components/management/date-time-field'
 import { PageHeading } from '@/components/management/page-heading'
 import { StatusBadge } from '@/components/management/status-badge'
 import { useManagement } from '@/lib/management'
@@ -56,6 +63,50 @@ function dateTime(value: string) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value))
+}
+
+function dateInputValue(value: string | null) {
+  if (!value) return ''
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value))
+}
+
+function countryName(countryCode: string) {
+  return new Intl.DisplayNames(['zh-CN'], { type: 'region' }).of(countryCode) ?? countryCode
+}
+
+const enterpriseTypeLabels: Record<1 | 2 | 3, string> = {
+  1: '供应企业',
+  2: '采购企业',
+  3: '综合企业',
+}
+
+interface MemberForm {
+  name: string
+  countryCode: string
+  enterpriseType: '1' | '2' | '3'
+  declaredCreditCode: string
+  contactPhone: string
+  contactEmail: string
+  description: string
+  levelId: string
+  expireAt: string
+}
+
+const emptyMemberForm: MemberForm = {
+  name: '',
+  countryCode: 'CN',
+  enterpriseType: '3',
+  declaredCreditCode: '',
+  contactPhone: '',
+  contactEmail: '',
+  description: '',
+  levelId: 'none',
+  expireAt: '',
 }
 
 export function EnterprisesScreen() {
@@ -84,17 +135,11 @@ export function EnterprisesScreen() {
   const [importRowsOpen, setImportRowsOpen] = useState(false)
   const [importRows, setImportRows] = useState<ImportRowDto[]>([])
   const [importRowsLoading, setImportRowsLoading] = useState(false)
-  const [affiliationOpen, setAffiliationOpen] = useState(false)
-  const [enterpriseId, setEnterpriseId] = useState('')
-  const [certificationLevelCode, setCertificationLevelCode] = useState('none')
-  const [affiliationReason, setAffiliationReason] = useState('manual')
+  const [memberOpen, setMemberOpen] = useState(false)
+  const [editingMember, setEditingMember] = useState<ChamberAffiliation | null>(null)
+  const [memberForm, setMemberForm] = useState<MemberForm>(emptyMemberForm)
+  const [deleteTarget, setDeleteTarget] = useState<ChamberAffiliation | null>(null)
   const [levels, setLevels] = useState<CertificationLevelDto[]>([])
-  const [affiliationAction, setAffiliationAction] = useState<{
-    affiliation: ChamberAffiliation
-    action: 'suspend' | 'restore' | 'end' | 'certify' | 'renew_certification' | 'revoke_certification'
-  } | null>(null)
-  const [actionReason, setActionReason] = useState('')
-  const [actionLevelCode, setActionLevelCode] = useState('')
   const latestJob = snapshot?.importJobs[0]
 
   useEffect(() => {
@@ -149,10 +194,6 @@ export function EnterprisesScreen() {
     refreshImportJob,
   ])
 
-  const certifications = useMemo(
-    () => new Map((snapshot?.certifications ?? []).map((item) => [item.enterpriseId, item])),
-    [snapshot?.certifications],
-  )
   const affiliations = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase()
     return (snapshot?.affiliations ?? []).filter((item) => (
@@ -242,89 +283,87 @@ export function EnterprisesScreen() {
     }
   }
 
-  async function openAffiliationCreate() {
+  async function openMemberCreate() {
     await loadLevels()
-    setEnterpriseId('')
-    setCertificationLevelCode('none')
-    setAffiliationReason('manual')
-    setAffiliationOpen(true)
+    setEditingMember(null)
+    setMemberForm({ ...emptyMemberForm })
+    setMemberOpen(true)
   }
 
-  async function submitAffiliation() {
-    if (!enterpriseId.trim()) {
-      toast.error('请填写已有企业 ID')
+  async function openMemberEdit(member: ChamberAffiliation) {
+    await loadLevels()
+    setEditingMember(member)
+    setMemberForm({
+      name: member.enterpriseName,
+      countryCode: member.countryCode,
+      enterpriseType: String(member.enterpriseType) as MemberForm['enterpriseType'],
+      declaredCreditCode: member.declaredCreditCode,
+      contactPhone: member.contactPhone,
+      contactEmail: member.contactEmail,
+      description: member.description,
+      levelId: member.chamberLevelId ?? 'none',
+      expireAt: dateInputValue(member.chamberLevelExpireAt),
+    })
+    setMemberOpen(true)
+  }
+
+  async function submitMember() {
+    if (!memberForm.name.trim()) {
+      toast.error('请填写会员单位名称')
+      return
+    }
+    if (memberForm.contactEmail && !/^\S+@\S+\.\S+$/.test(memberForm.contactEmail)) {
+      toast.error('请填写正确的联系邮箱')
       return
     }
     setSubmitting(true)
     try {
-      await createChamberAffiliation(workspaceId, {
-        enterprise_id: enterpriseId.trim(),
-        certification_level_code: certificationLevelCode === 'none' ? null : certificationLevelCode,
-        reason: affiliationReason.trim() || 'manual',
-      })
+      const body = {
+        name: memberForm.name.trim(),
+        country_code: memberForm.countryCode,
+        enterprise_type: Number(memberForm.enterpriseType) as 1 | 2 | 3,
+        declared_credit_code: memberForm.declaredCreditCode.trim() || null,
+        contact_phone: memberForm.contactPhone.trim() || null,
+        contact_email: memberForm.contactEmail.trim() || null,
+        description: memberForm.description.trim() || null,
+      }
+      let saved = editingMember
+        ? await updateChamberEnterprise(editingMember.enterpriseId, editingMember.version, body)
+        : await createChamberEnterprise(body)
+      const nextLevelId = memberForm.levelId === 'none' ? null : memberForm.levelId
+      const levelChanged = !editingMember
+        ? nextLevelId !== null
+        : editingMember.chamberLevelId !== nextLevelId
+          || dateInputValue(editingMember.chamberLevelExpireAt) !== memberForm.expireAt
+      if (levelChanged) {
+        saved = await setChamberEnterpriseLevel(
+          saved.enterprise_id,
+          saved.version,
+          nextLevelId,
+          nextLevelId && memberForm.expireAt ? `${memberForm.expireAt}T23:59:59+08:00` : null,
+        )
+      }
       await refreshWorkspace(workspaceId)
-      setAffiliationOpen(false)
-      toast.success('企业归属关系已建立')
+      setMemberOpen(false)
+      toast.success(editingMember ? '会员单位已更新' : '会员单位已录入')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '建立企业归属失败')
+      toast.error(error instanceof Error ? error.message : '会员单位保存失败')
+      await refreshWorkspace(workspaceId).catch(() => undefined)
     } finally {
       setSubmitting(false)
     }
   }
 
-  async function openAffiliationAction(
-    affiliation: ChamberAffiliation,
-    action: NonNullable<typeof affiliationAction>['action'],
-  ) {
-    if (action === 'certify' || action === 'renew_certification') {
-      const availableLevels = await loadLevels()
-      setActionLevelCode(availableLevels.find((level) => level.is_default)?.code ?? availableLevels[0]?.code ?? '')
-    } else {
-      setActionLevelCode('')
-    }
-    setActionReason('')
-    setAffiliationAction({ affiliation, action })
-  }
-
-  async function submitAffiliationAction() {
-    if (!affiliationAction) return
-    const { affiliation, action } = affiliationAction
-    if (['end', 'revoke_certification'].includes(action) && !actionReason.trim()) {
-      toast.error('该操作必须填写原因')
-      return
-    }
-    if (['certify', 'renew_certification'].includes(action) && !actionLevelCode) {
-      toast.error('请选择认证等级')
-      return
-    }
+  async function confirmDeleteMember() {
+    if (!deleteTarget) return
     setSubmitting(true)
     try {
-      if (action === 'certify' || action === 'renew_certification') {
-        await actOnChamberAffiliation(workspaceId, affiliation.affiliationId, {
-          action,
-          certification_level_code: actionLevelCode,
-          reason: actionReason.trim() || null,
-          expected_version: affiliation.version,
-        })
-      } else if (action === 'end' || action === 'revoke_certification') {
-        await actOnChamberAffiliation(workspaceId, affiliation.affiliationId, {
-          action,
-          reason: actionReason.trim(),
-          expected_version: affiliation.version,
-        })
-      } else {
-        await actOnChamberAffiliation(workspaceId, affiliation.affiliationId, {
-          action,
-          reason: actionReason.trim() || null,
-          expected_version: affiliation.version,
-        })
-      }
+      await deleteChamberEnterprise(deleteTarget.enterpriseId)
       await refreshWorkspace(workspaceId)
-      setAffiliationAction(null)
-      toast.success('企业归属与认证状态已更新')
+      setDeleteTarget(null)
+      toast.success('会员单位已删除')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '状态更新失败')
-      await refreshWorkspace(workspaceId).catch(() => undefined)
+      toast.error(error instanceof Error ? error.message : '会员单位删除失败')
     } finally {
       setSubmitting(false)
     }
@@ -350,7 +389,7 @@ export function EnterprisesScreen() {
       <PageHeading
         eyebrow="我的商会"
         title="会员单位"
-        description="批量导入已核验的会员企业，并持续查看商会认证和平台认证状态。资料不完整的企业会进入待完善清单。"
+        description="手动录入或批量导入会员单位，统一维护基础资料、会员等级和有效期。"
         icon={Building2}
         action={
           <div className="flex gap-2">
@@ -362,13 +401,13 @@ export function EnterprisesScreen() {
               <RefreshCcw className={`h-4 w-4 ${snapshot?.loading ? 'animate-spin' : ''}`} />
               刷新
             </Button>
-            <Button variant="outline" onClick={() => void openAffiliationCreate()}>
-              <Building2 className="h-4 w-4" />
-              添加已有企业
+            <Button variant="outline" onClick={() => void openMemberCreate()}>
+              <Plus className="h-4 w-4" />
+              手动录入
             </Button>
             <Button onClick={() => setImportOpen(true)}>
               <Upload className="h-4 w-4" />
-              导入企业
+              批量导入
             </Button>
           </div>
         }
@@ -382,9 +421,9 @@ export function EnterprisesScreen() {
 
       <section className="mb-4 grid gap-3 sm:grid-cols-3">
         {[
-          ['商会关系', snapshot?.affiliations.length ?? 0],
-          ['有效认证', snapshot?.certifications.filter((item) => item.status === 'active').length ?? 0],
-          ['待补标识', snapshot?.candidates.filter((item) => item.status === 'needs_identifier').length ?? 0],
+          ['会员单位', snapshot?.affiliations.length ?? 0],
+          ['已设置等级', snapshot?.certifications.filter((item) => item.status === 'active').length ?? 0],
+          ['待补资料', snapshot?.candidates.filter((item) => item.status === 'needs_identifier').length ?? 0],
         ].map(([label, value]) => (
           <Card key={String(label)}>
             <CardContent className="p-5">
@@ -485,60 +524,54 @@ export function EnterprisesScreen() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left">
+            <table className="w-full min-w-[980px] text-left">
               <thead>
                 <tr className="border-b bg-muted/50 text-[11px] text-muted-foreground">
                   <th className="px-5 py-3 font-medium">会员企业</th>
-                  <th className="px-4 py-3 font-medium">商会关系</th>
-                  <th className="px-4 py-3 font-medium">商会认证</th>
+                  <th className="px-4 py-3 font-medium">类型与地区</th>
+                  <th className="px-4 py-3 font-medium">会员等级</th>
                   <th className="px-4 py-3 font-medium">平台认证</th>
-                  <th className="px-5 py-3 font-medium">加入时间</th>
-                  <th className="px-5 py-3 font-medium">操作</th>
+                  <th className="px-5 py-3 font-medium">更新时间</th>
+                  <th className="px-5 py-3 text-right font-medium">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {affiliations.map((item) => {
-                  const certification = certifications.get(item.enterpriseId)
-                  return (
+                {affiliations.map((item) => (
                     <tr key={item.affiliationId}>
                       <td className="px-5 py-4">
                         <p className="text-sm font-medium">{item.enterpriseName}</p>
+                        <p className="font-data mt-1 text-xs text-muted-foreground">
+                          {item.declaredCreditCode || item.enterpriseId}
+                        </p>
                       </td>
-                      <td className="px-4 py-4"><StatusBadge status={item.status} /></td>
                       <td className="px-4 py-4">
-                        {certification ? (
+                        <p className="text-sm">{enterpriseTypeLabels[item.enterpriseType]}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{countryName(item.countryCode)}</p>
+                      </td>
+                      <td className="px-4 py-4">
+                        {item.chamberLevelName ? (
                           <div>
-                            <p className="text-sm font-medium">{certification.levelName}</p>
-                            <p className="mt-1 text-xs text-muted-foreground">{certification.levelCode}</p>
+                            <p className="text-sm font-medium">{item.chamberLevelName}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {item.chamberLevelExpireAt ? `有效至 ${dateInputValue(item.chamberLevelExpireAt)}` : '长期有效'}
+                            </p>
                           </div>
-                        ) : <span className="text-sm text-muted-foreground">未签发</span>}
+                        ) : <span className="text-sm text-muted-foreground">未设置</span>}
                       </td>
                       <td className="px-4 py-4"><StatusBadge status={item.platformVerificationStatus} /></td>
-                      <td className="font-data px-5 py-4 text-xs text-muted-foreground">{dateTime(item.joinedAt)}</td>
-                      <td className="px-5 py-4">
-                        <div className="flex flex-wrap gap-1.5">
-                          {item.status === 'active' ? (
-                            <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'suspend')}>暂停</Button>
-                          ) : item.status === 'suspended' ? (
-                            <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'restore')}>恢复</Button>
-                          ) : null}
-                          {item.status !== 'ended' && (
-                            <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'end')}>结束关系</Button>
-                          )}
-                          {!certification && item.status === 'active' && (
-                            <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'certify')}>签发认证</Button>
-                          )}
-                          {certification?.status === 'active' && (
-                            <>
-                              <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'renew_certification')}>续期</Button>
-                              <Button variant="outline" size="sm" onClick={() => void openAffiliationAction(item, 'revoke_certification')}>撤销认证</Button>
-                            </>
-                          )}
+                      <td className="font-data px-5 py-4 text-xs text-muted-foreground">{dateTime(item.updatedAt)}</td>
+                      <td className="px-5 py-4 text-right">
+                        <div className="flex justify-end gap-1.5">
+                          <Button variant="ghost" size="sm" onClick={() => void openMemberEdit(item)}>
+                            <Pencil className="h-4 w-4" />编辑
+                          </Button>
+                          <Button variant="ghost" size="sm" className="text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => setDeleteTarget(item)}>
+                            <Trash2 className="h-4 w-4" />删除
+                          </Button>
                         </div>
                       </td>
                     </tr>
-                  )
-                })}
+                  ))}
               </tbody>
             </table>
           </div>
@@ -546,7 +579,7 @@ export function EnterprisesScreen() {
             <div className="grid min-h-52 place-items-center text-center">
               <div>
                 {snapshot?.loading ? <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-ember-600" /> : <Building2 className="mx-auto h-8 w-8 text-muted-foreground" />}
-                <p className="mt-3 text-sm font-medium">{snapshot?.loading ? '正在读取实时关系…' : '暂无商会企业关系'}</p>
+                <p className="mt-3 text-sm font-medium">{snapshot?.loading ? '正在读取会员单位…' : '暂无会员单位'}</p>
               </div>
             </div>
           )}
@@ -647,74 +680,118 @@ export function EnterprisesScreen() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={affiliationOpen} onOpenChange={setAffiliationOpen}>
-        <DialogContent>
+      <Dialog open={memberOpen} onOpenChange={setMemberOpen}>
+        <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>添加已有企业</DialogTitle>
-            <DialogDescription>建立商会归属关系，可同时签发首期商会认证。</DialogDescription>
+            <DialogTitle>{editingMember ? '编辑会员单位' : '手动录入会员单位'}</DialogTitle>
+            <DialogDescription>
+              {editingMember ? '修改会员单位资料、会员等级和有效期，保存后立即生效。' : '录入会员单位基础资料，可同时设置首期会员等级。'}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="affiliation-enterprise-id">企业 ID</Label>
-            <Input id="affiliation-enterprise-id" value={enterpriseId} onChange={(event) => setEnterpriseId(event.target.value)} placeholder="ent_xxx" />
-          </div>
-          <div className="space-y-2">
-            <Label>首期认证等级</Label>
-            <Select value={certificationLevelCode} onValueChange={setCertificationLevelCode}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">暂不签发认证</SelectItem>
-                {levels.map((level) => (
-                  <SelectItem key={level.id} value={level.code}>{level.name}（{level.code}）</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="affiliation-reason">建立原因</Label>
-            <Input id="affiliation-reason" value={affiliationReason} onChange={(event) => setAffiliationReason(event.target.value)} />
+          <div className="space-y-6">
+            <section className="space-y-4">
+              <div className="border-l-2 border-ember-500 pl-3">
+                <h3 className="text-sm font-semibold">基础资料</h3>
+                <p className="mt-1 text-xs text-muted-foreground">用于会员单位名录展示和主体识别。</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="member-name">会员单位名称</Label>
+                  <Input id="member-name" value={memberForm.name} onChange={(event) => setMemberForm((current) => ({ ...current, name: event.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>单位类型</Label>
+                  <Select value={memberForm.enterpriseType} onValueChange={(value) => setMemberForm((current) => ({ ...current, enterpriseType: value as MemberForm['enterpriseType'] }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">供应企业</SelectItem>
+                      <SelectItem value="2">采购企业</SelectItem>
+                      <SelectItem value="3">综合企业</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>国家或地区</Label>
+                  <CountrySelect value={memberForm.countryCode} onValueChange={(value) => setMemberForm((current) => ({ ...current, countryCode: value }))} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="member-credit-code">统一社会信用代码或登记编号</Label>
+                  <Input id="member-credit-code" value={memberForm.declaredCreditCode} onChange={(event) => setMemberForm((current) => ({ ...current, declaredCreditCode: event.target.value }))} />
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-4 border-t pt-5">
+              <div className="border-l-2 border-ember-500 pl-3">
+                <h3 className="text-sm font-semibold">联系与介绍</h3>
+                <p className="mt-1 text-xs text-muted-foreground">便于商会日常服务和资料核对。</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="member-phone">联系电话</Label>
+                  <Input id="member-phone" value={memberForm.contactPhone} onChange={(event) => setMemberForm((current) => ({ ...current, contactPhone: event.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="member-email">联系邮箱</Label>
+                  <Input id="member-email" type="email" value={memberForm.contactEmail} onChange={(event) => setMemberForm((current) => ({ ...current, contactEmail: event.target.value }))} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="member-description">单位简介</Label>
+                  <Textarea id="member-description" value={memberForm.description} onChange={(event) => setMemberForm((current) => ({ ...current, description: event.target.value }))} />
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-4 border-t pt-5">
+              <div className="border-l-2 border-ember-500 pl-3">
+                <h3 className="text-sm font-semibold">会员等级</h3>
+                <p className="mt-1 text-xs text-muted-foreground">等级由当前商会维护，不影响平台认证等级。</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>会员等级</Label>
+                  <Select value={memberForm.levelId} onValueChange={(value) => setMemberForm((current) => ({ ...current, levelId: value, expireAt: value === 'none' ? '' : current.expireAt }))}>
+                    <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">暂不设置等级</SelectItem>
+                      {levels.map((level) => <SelectItem key={level.id} value={level.id}>{level.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="member-expire-at">有效期至</Label>
+                  <DateTimeField id="member-expire-at" type="date" value={memberForm.expireAt} disabled={memberForm.levelId === 'none'} onValueChange={(value) => setMemberForm((current) => ({ ...current, expireAt: value }))} />
+                  <p className="text-xs text-muted-foreground">留空表示长期有效。</p>
+                </div>
+              </div>
+            </section>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAffiliationOpen(false)}>取消</Button>
-            <Button disabled={submitting} onClick={() => void submitAffiliation()}>
+            <Button variant="outline" onClick={() => setMemberOpen(false)}>取消</Button>
+            <Button disabled={submitting} onClick={() => void submitMember()}>
               {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              建立关系
+              保存
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(affiliationAction)} onOpenChange={(open) => !open && setAffiliationAction(null)}>
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>更新企业归属与认证</DialogTitle>
+            <DialogTitle>删除会员单位</DialogTitle>
             <DialogDescription>
-              将对“{affiliationAction?.affiliation.enterpriseName}”执行 {affiliationAction?.action}。409 冲突时页面会重新读取当前版本。
+              确认删除“{deleteTarget?.enterpriseName}”？删除后该单位将从当前商会会员名录中移除。
             </DialogDescription>
           </DialogHeader>
-          {affiliationAction && ['certify', 'renew_certification'].includes(affiliationAction.action) && (
-            <div className="space-y-2">
-              <Label>认证等级</Label>
-              <Select value={actionLevelCode} onValueChange={setActionLevelCode}>
-                <SelectTrigger><SelectValue placeholder="选择等级" /></SelectTrigger>
-                <SelectContent>
-                  {levels.map((level) => (
-                    <SelectItem key={level.id} value={level.code}>{level.name}（{level.code}）</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="affiliation-action-reason">
-              原因 {affiliationAction && ['end', 'revoke_certification'].includes(affiliationAction.action) ? '（必填）' : '（选填）'}
-            </Label>
-            <Textarea id="affiliation-action-reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} />
+          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            此操作会同时结束当前会员单位的等级和有效期，请确认后再继续。
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAffiliationAction(null)}>取消</Button>
-            <Button disabled={submitting} onClick={() => void submitAffiliationAction()}>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>取消</Button>
+            <Button variant="destructive" disabled={submitting} onClick={() => void confirmDeleteMember()}>
               {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              确认执行
+              确认删除
             </Button>
           </DialogFooter>
         </DialogContent>

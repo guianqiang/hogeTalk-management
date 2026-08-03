@@ -51,6 +51,16 @@ export function mapAffiliation(dto: ChamberAffiliationDto): ChamberAffiliation {
     status: dto.status,
     joinedAt: dto.joined_at,
     platformVerificationStatus: dto.platform_verification_status,
+    countryCode: '',
+    enterpriseType: 3,
+    description: '',
+    contactPhone: '',
+    contactEmail: '',
+    declaredCreditCode: '',
+    chamberLevelId: null,
+    chamberLevelName: null,
+    chamberLevelExpireAt: null,
+    updatedAt: dto.joined_at,
     version: dto.version,
   }
 }
@@ -101,6 +111,18 @@ export function mapCurrentChamberAffiliation(
         : dto.audit_status === 'pending'
           ? 'pending'
           : 'unverified',
+    countryCode: dto.country_code,
+    enterpriseType: dto.enterprise_type === 2 || dto.enterprise_type === 3
+      ? dto.enterprise_type
+      : 1,
+    description: dto.description ?? '',
+    contactPhone: dto.contact_phone ?? '',
+    contactEmail: dto.contact_email ?? '',
+    declaredCreditCode: dto.declared_credit_code ?? '',
+    chamberLevelId: dto.chamber_level_id,
+    chamberLevelName: dto.chamber_level_name,
+    chamberLevelExpireAt: dto.chamber_level_expire_at,
+    updatedAt: dto.updated_at,
     version: dto.version,
   }
 }

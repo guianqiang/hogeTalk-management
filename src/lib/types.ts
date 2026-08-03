@@ -149,6 +149,16 @@ export interface ChamberAffiliation {
   status: AffiliationStatus
   joinedAt: string
   platformVerificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected'
+  countryCode: string
+  enterpriseType: 1 | 2 | 3
+  description: string
+  contactPhone: string
+  contactEmail: string
+  declaredCreditCode: string
+  chamberLevelId: string | null
+  chamberLevelName: string | null
+  chamberLevelExpireAt: string | null
+  updatedAt: string
   version: number
 }
 

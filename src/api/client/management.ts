@@ -67,7 +67,7 @@ const accountIdentifierSchema = z.object({
 }).strict()
 
 type RequestOptions = {
-  method?: 'GET' | 'POST' | 'PUT'
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
   idempotencyKey?: string
 }
@@ -320,6 +320,70 @@ export type PlatformEnterpriseWriteInput = {
   contact_phone?: string | null
   contact_email?: string | null
   declared_credit_code?: string | null
+}
+
+export type ChamberEnterpriseWriteInput = PlatformEnterpriseWriteInput & {
+  main_business?: string | null
+  address?: string | null
+  contact_name?: string | null
+}
+
+export function createChamberEnterprise(body: ChamberEnterpriseWriteInput) {
+  return request('management/chamber/enterprises', currentChamberEnterpriseSchema, {
+    method: 'POST',
+    idempotencyKey: newIdempotencyKey(),
+    body,
+  })
+}
+
+export function updateChamberEnterprise(
+  enterpriseId: string,
+  expectedVersion: number,
+  body: ChamberEnterpriseWriteInput,
+) {
+  return request(
+    `management/chamber/enterprises/${encodeURIComponent(enterpriseId)}${queryString({
+      expected_version: expectedVersion,
+    })}`,
+    currentChamberEnterpriseSchema,
+    {
+      method: 'PUT',
+      idempotencyKey: newIdempotencyKey(),
+      body,
+    },
+  )
+}
+
+export function deleteChamberEnterprise(enterpriseId: string) {
+  return request(
+    `management/chamber/enterprises/${encodeURIComponent(enterpriseId)}`,
+    z.null(),
+    {
+      method: 'DELETE',
+      idempotencyKey: newIdempotencyKey(),
+    },
+  )
+}
+
+export function setChamberEnterpriseLevel(
+  enterpriseId: string,
+  expectedVersion: number,
+  chamberLevelId: string | null,
+  expireAt: string | null,
+) {
+  return request(
+    `management/chamber/enterprises/${encodeURIComponent(enterpriseId)}/level`,
+    currentChamberEnterpriseSchema,
+    {
+      method: 'POST',
+      idempotencyKey: newIdempotencyKey(),
+      body: {
+        chamber_level_id: chamberLevelId,
+        expire_at: expireAt,
+        expected_version: expectedVersion,
+      },
+    },
+  )
 }
 
 export function createPlatformEnterprise(body: PlatformEnterpriseWriteInput) {
