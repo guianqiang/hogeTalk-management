@@ -130,9 +130,7 @@ export function AccountMembersScreen() {
   }, [load])
 
   const menuItems = catalog?.items ?? []
-  const createRoleOptions: StaffRoleTemplate[] = workspace?.kind === 'platform'
-    ? ['platform_admin', 'platform_operator']
-    : ['chamber_admin']
+  const createRoleOptions: StaffRoleTemplate[] = ['platform_admin', 'platform_operator']
 
   function resetCreate() {
     const nextRole = workspace?.kind === 'chamber' ? 'chamber_admin' : 'platform_operator'
@@ -306,7 +304,9 @@ export function AccountMembersScreen() {
       />
 
       <Card className="mb-4">
-        <CardContent className="grid gap-3 p-4 md:grid-cols-[minmax(240px,1fr)_180px_160px_auto]">
+        <CardContent className={`grid gap-3 p-4 ${workspace.kind === 'platform'
+          ? 'md:grid-cols-[minmax(240px,1fr)_180px_160px_auto]'
+          : 'md:grid-cols-[minmax(240px,1fr)_160px_auto]'}`}>
           <Input
             value={keywordDraft}
             onChange={(event) => setKeywordDraft(event.target.value)}
@@ -327,11 +327,7 @@ export function AccountMembersScreen() {
                 <SelectItem value="platform_operator">运营人员</SelectItem>
               </SelectContent>
             </Select>
-          ) : (
-            <div className="flex h-10 items-center rounded-md border bg-muted/20 px-3 text-sm text-muted-foreground">
-              商会管理员
-            </div>
-          )}
+          ) : null}
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'active' | 'revoked' | 'all')}>
             <SelectTrigger aria-label="账号状态"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -374,12 +370,12 @@ export function AccountMembersScreen() {
         <Card className="overflow-hidden">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left">
+              <table className={`w-full text-left ${workspace.kind === 'platform' ? 'min-w-[860px]' : 'min-w-[720px]'}`}>
                 <thead>
                   <tr className="border-b bg-muted/40 text-[11px] text-muted-foreground">
                     <th className="px-5 py-3 font-medium">人员</th>
                     <th className="px-5 py-3 font-medium">登录账号</th>
-                    <th className="px-5 py-3 font-medium">角色类型</th>
+                    {workspace.kind === 'platform' && <th className="px-5 py-3 font-medium">角色类型</th>}
                     <th className="px-5 py-3 font-medium">状态</th>
                     <th className="px-5 py-3 font-medium">最近活跃</th>
                     <th className="px-5 py-3 text-right font-medium">操作</th>
@@ -405,7 +401,7 @@ export function AccountMembersScreen() {
                         <p className="font-data">{item.username}</p>
                         <p className="mt-1 text-xs text-muted-foreground">{item.masked_phone || '未绑定手机号'}</p>
                       </td>
-                      <td className="px-5 py-4">{roleLabels[item.role_template]}</td>
+                      {workspace.kind === 'platform' && <td className="px-5 py-4">{roleLabels[item.role_template]}</td>}
                       <td className="px-5 py-4"><StatusBadge status={item.status} /></td>
                       <td className="px-5 py-4 text-muted-foreground">{dateTime(item.last_active_at)}</td>
                       <td className="px-5 py-4 text-right">
@@ -434,7 +430,7 @@ export function AccountMembersScreen() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>人员详情</DialogTitle>
-            <DialogDescription>查看账号、角色和当前工作范围。</DialogDescription>
+            <DialogDescription>{workspace.kind === 'platform' ? '查看账号、角色和当前工作范围。' : '查看账号与当前状态。'}</DialogDescription>
           </DialogHeader>
           {detailTarget && (
             <div className="space-y-5">
@@ -450,32 +446,36 @@ export function AccountMembersScreen() {
                       <span className="rounded-full border border-ember-200 bg-ember-50 px-2 py-0.5 text-[11px] text-ember-700">当前账号</span>
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground">{roleLabels[detailTarget.role_template]} · {detailTarget.title}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{workspace.kind === 'platform'
+                    ? `${roleLabels[detailTarget.role_template]} · ${detailTarget.title}`
+                    : detailTarget.title}</p>
                 </div>
               </div>
               <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
                 <div><dt className="text-xs text-muted-foreground">登录账号</dt><dd className="font-data mt-1 text-sm">{detailTarget.username}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">登录手机号</dt><dd className="mt-1 text-sm">{detailTarget.masked_phone || '未绑定手机号'}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">角色类型</dt><dd className="mt-1 text-sm">{roleLabels[detailTarget.role_template]}</dd></div>
+                {workspace.kind === 'platform' && (
+                  <div><dt className="text-xs text-muted-foreground">角色类型</dt><dd className="mt-1 text-sm">{roleLabels[detailTarget.role_template]}</dd></div>
+                )}
                 <div><dt className="text-xs text-muted-foreground">密码状态</dt><dd className="mt-1 text-sm">{detailTarget.must_change_password ? '首次登录需修改密码' : '正常'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">创建时间</dt><dd className="mt-1 text-sm">{dateTime(detailTarget.joined_at)}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">最近活跃</dt><dd className="mt-1 text-sm">{dateTime(detailTarget.last_active_at)}</dd></div>
               </dl>
-              <div>
+              {workspace.kind === 'platform' && <div>
                 <p className="text-xs text-muted-foreground">工作范围</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {staffMenuSummary(detailTarget.role_template, detailTarget.menu_keys, menuItems).map((summary) => (
                     <span key={summary} className="rounded-full border bg-muted/30 px-2.5 py-1 text-xs">{summary}</span>
                   ))}
                 </div>
-              </div>
+              </div>}
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailTarget(null)}>关闭</Button>
             {detailTarget?.status === 'active' && detailTarget.staff_assignment_id !== workspace.staffAssignmentId && (
               <>
-                <Button
+                {workspace.kind === 'platform' && <Button
                   variant="outline"
                   onClick={() => {
                     const target = detailTarget
@@ -484,7 +484,7 @@ export function AccountMembersScreen() {
                   }}
                 >
                   <Pencil className="h-4 w-4" />编辑
-                </Button>
+                </Button>}
                 <Button
                   variant="destructive"
                   onClick={() => {
@@ -519,7 +519,9 @@ export function AccountMembersScreen() {
           {createdAccount ? (
             <div className="space-y-4">
               <div className="rounded-lg border border-ember-200 bg-ember-50/55 p-4">
-                <p className="text-sm font-semibold">{createdAccount.display_name} · {roleLabels[createdAccount.role_template]}</p>
+                <p className="text-sm font-semibold">{createdAccount.display_name}{workspace.kind === 'platform'
+                  ? ` · ${roleLabels[createdAccount.role_template]}`
+                  : ''}</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div>
                     <Label>登录账号</Label>
@@ -569,24 +571,20 @@ export function AccountMembersScreen() {
                     </Button>
                   </div>
                 </div>
-                <div className="space-y-2 sm:col-span-2">
+                {workspace.kind === 'platform' && <div className="space-y-2 sm:col-span-2">
                   <Label>人员类型</Label>
-                  {createRoleOptions.length === 1 ? (
-                    <div className="flex h-10 items-center rounded-md border bg-muted/25 px-3 text-sm font-medium">商会管理员</div>
-                  ) : (
-                    <Select value={roleTemplate} onValueChange={(value) => {
-                      setRoleTemplate(value as StaffRoleTemplate)
-                      setSelectedMenuKeys([])
-                    }}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {createRoleOptions.map((role) => <SelectItem key={role} value={role}>{roleLabels[role]}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
+                  <Select value={roleTemplate} onValueChange={(value) => {
+                    setRoleTemplate(value as StaffRoleTemplate)
+                    setSelectedMenuKeys([])
+                  }}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {createRoleOptions.map((role) => <SelectItem key={role} value={role}>{roleLabels[role]}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>}
               </div>
-              {roleTemplate === 'platform_operator' ? (
+              {workspace.kind === 'platform' && (roleTemplate === 'platform_operator' ? (
                 <div>
                   <Label>可见菜单</Label>
                   <p className="mt-1 text-xs text-muted-foreground">与左侧菜单保持一致，选中后系统自动配置对应业务权限。</p>
@@ -607,10 +605,10 @@ export function AccountMembersScreen() {
                 </div>
               ) : (
                 <div className="rounded-lg border border-ember-200 bg-ember-50/45 p-4">
-                  <p className="text-sm font-semibold">{roleTemplate === 'platform_admin' ? '平台全部管理权限' : '所属商会全部管理权限'}</p>
+                  <p className="text-sm font-semibold">平台全部管理权限</p>
                   <p className="mt-1 text-xs text-muted-foreground">该人员类型无需逐项配置菜单。</p>
                 </div>
-              )}
+              ))}
             </div>
           )}
           <DialogFooter>
