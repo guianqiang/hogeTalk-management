@@ -5,6 +5,8 @@ import {
   callManagementBackend,
 } from '@/api/server/session'
 
+export const dynamic = 'force-dynamic'
+
 const requestSchema = z.object({
   password_change_token: z.string().min(32).max(2048),
   new_password: z.string().min(12).max(128),
@@ -23,7 +25,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const backend = await callManagementBackend('/v1/auth/management/password/initial-change', {
+    const backend = await callManagementBackend('/auth/management/password/initial-change', {
       method: 'POST',
       headers: {
         Accept: 'application/json',

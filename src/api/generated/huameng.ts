@@ -8,9 +8,7 @@ export const managementMenuKeySchema = z.enum([
   'chamber_management',
   'content_management',
   'product_management',
-  'activity_operations',
   'inquiry_cooperation',
-  'notification_center',
   'account_governance',
   'billing_governance',
   'audit_export',
@@ -94,6 +92,7 @@ export const managementEnterpriseSchema = z.object({
 
 const currentManagementMeSchema = z.object({
   account_id: z.string(),
+  must_change_password: z.boolean().default(false),
   enterprise: managementEnterpriseSchema,
 }).strict()
 
@@ -124,6 +123,62 @@ export const managementMeSchema = z.preprocess((value) => {
     },
   }
 }, currentManagementMeSchema)
+
+export const currentChamberEnterpriseSchema = z.object({
+  enterprise_id: z.string(),
+  name: z.string(),
+  country_code: z.string(),
+  subject_type: z.literal('company'),
+  enterprise_type: z.number().int().min(1).max(3),
+  logo: nullableString,
+  avatar_text: nullableString,
+  avatar_bg_color: nullableString,
+  description: nullableString,
+  main_business: nullableString,
+  address: nullableString,
+  contact_phone: nullableString,
+  contact_email: nullableString,
+  outlink: nullableString,
+  innerlink: nullableString,
+  declared_credit_code: nullableString,
+  license_img: nullableString,
+  legal_person: nullableString,
+  contact_name: nullableString,
+  chamber_id: nullableString,
+  chamber_name: nullableString,
+  industry_id: nullableString,
+  is_verified: z.boolean(),
+  vip_level: z.number().int(),
+  platform_level: z.number().int(),
+  platform_level_expire_at: nullableString,
+  chamber_level_id: nullableString,
+  chamber_level_name: nullableString,
+  chamber_level_expire_at: nullableString,
+  supply_product_count: z.number().int(),
+  order_count: z.number().int(),
+  project_count: z.number().int(),
+  student_count: z.number().int(),
+  cooperation_school_count: z.number().int(),
+  route_count: z.number().int(),
+  deal_count: z.number().int(),
+  good_rate: z.number(),
+  audit_status: z.enum(['pending', 'approved', 'rejected']),
+  audit_remark: nullableString,
+  audited_at: nullableString,
+  audited_by_account_id: nullableString,
+  status: z.enum(['enabled', 'disabled']),
+  created_at: z.string(),
+  updated_at: z.string(),
+  version: z.number().int().positive(),
+}).strict()
+
+export const currentChamberEnterprisePageSchema = z.object({
+  items: z.array(currentChamberEnterpriseSchema),
+  page: z.object({
+    next_cursor: nullableString.optional(),
+    has_more: z.boolean(),
+  }).strict(),
+}).strict()
 
 export const importJobSchema = z.object({
   job_id: z.string(),
@@ -237,6 +292,7 @@ export type ManagementAuthSessionDto = z.infer<typeof managementAuthSessionSchem
 export type ManagementPasswordChangeRequiredDto = z.infer<typeof managementPasswordChangeRequiredSchema>
 export type ManagementLoginResponseDto = z.infer<typeof managementLoginResponseSchema>
 export type ManagementWorkspaceDto = z.infer<typeof managementWorkspaceSchema>
+export type CurrentChamberEnterpriseDto = z.infer<typeof currentChamberEnterpriseSchema>
 export type ManagementEnterpriseDto = z.infer<typeof managementEnterpriseSchema>
 export type ManagementMeDto = z.infer<typeof managementMeSchema>
 export type ManagementMenuKey = z.infer<typeof managementMenuKeySchema>

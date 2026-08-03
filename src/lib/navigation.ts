@@ -46,7 +46,7 @@ const platformNavigation: ManagementNavGroup[] = [
       { href: '/legacy/investment', label: '经贸合作', note: '管理经贸合作内容', icon: 'content', menuKey: 'content_management' },
       { href: '/legacy/supply-chain', label: '供应链平台', note: '管理供应链内容', icon: 'enterprise', menuKey: 'content_management' },
       { href: '/legacy/associations', label: '商协会', note: '管理商协会内容', icon: 'membership', menuKey: 'content_management' },
-      { href: '/legacy/activities', label: '近期活动', note: '管理活动信息', icon: 'content', menuKey: 'activity_operations' },
+      { href: '/legacy/activities', label: '近期活动', note: '管理活动信息', icon: 'content', menuKey: 'content_management' },
       { href: '/legacy/parks', label: '东盟园区', note: '管理园区内容', icon: 'enterprise', menuKey: 'content_management' },
     ],
   },
@@ -82,7 +82,6 @@ const platformNavigation: ManagementNavGroup[] = [
     items: [
       { href: '/account-members', label: '后台人员', note: '管理后台人员和授权范围', icon: 'account', menuKey: 'account_governance' },
       { href: '/legacy/plans', label: '套餐与权益', note: '管理套餐、权益与配额规则', icon: 'settings', menuKey: 'billing_governance' },
-      { href: '/legacy/notifications', label: '业务通知', note: '查看风险提醒和业务通知', icon: 'content', menuKey: 'notification_center' },
       { href: '/audit', label: '操作审计', note: '追溯管理端业务操作', icon: 'audit', menuKey: 'audit_export' },
     ],
   },

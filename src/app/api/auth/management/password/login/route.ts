@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
 import {
   managementAuthSessionSchema,
   managementPasswordChangeRequiredSchema,
@@ -9,12 +8,12 @@ import {
   callManagementBackend,
   setSessionCookies,
 } from '@/api/server/session'
+import {
+  managementLoginBackendBody,
+  managementLoginRequestSchema,
+} from '@/api/server/management-login'
 
-const loginRequestSchema = z.object({
-  identifier: z.string().min(4).max(64),
-  country_code: z.string().regex(/^[A-Z]{2}$/),
-  password: z.string().min(8).max(128),
-}).strict()
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   let body: unknown
@@ -24,7 +23,7 @@ export async function POST(request: Request) {
     return bffErrorResponse(422, 'E_INPUT_INVALID', '登录请求不是有效 JSON', null)
   }
 
-  const input = loginRequestSchema.safeParse(body)
+  const input = managementLoginRequestSchema.safeParse(body)
   if (!input.success) {
     return bffErrorResponse(
       422,
@@ -35,7 +34,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const backend = await callManagementBackend('/v1/auth/management/password/login', {
+    const backend = await callManagementBackend('/auth/management/password/login', {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -43,7 +42,7 @@ export async function POST(request: Request) {
         'X-Request-Id': request.headers.get('X-Request-Id') ?? `req_${crypto.randomUUID().replaceAll('-', '')}`,
         'User-Agent': request.headers.get('User-Agent') ?? 'hogetalk-management-bff',
       },
-      body: JSON.stringify(input.data),
+      body: JSON.stringify(managementLoginBackendBody(input.data)),
     })
     const payload: unknown = await backend.json()
     if (!backend.ok) return NextResponse.json(payload, { status: backend.status })

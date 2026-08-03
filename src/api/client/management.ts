@@ -6,6 +6,8 @@ import {
   chamberAffiliationSchema,
   chamberCertificationSchema,
   certificationLevelSchema,
+  currentChamberEnterpriseSchema,
+  currentChamberEnterprisePageSchema,
   errorEnvelopeSchema,
   importCandidateSchema,
   importJobSchema,
@@ -64,7 +66,7 @@ const accountIdentifierSchema = z.object({
 }).strict()
 
 type RequestOptions = {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PUT'
   body?: unknown
   idempotencyKey?: string
 }
@@ -119,7 +121,7 @@ async function request<S extends z.ZodTypeAny>(
   if (method !== 'GET') headers.set('X-Management-CSRF', csrfToken())
   if (options.idempotencyKey) headers.set('Idempotency-Key', options.idempotencyKey)
 
-  const response = await fetch(`/api/management/${path}`, {
+  const response = await fetch(`/api/${path}`, {
     method,
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -184,7 +186,7 @@ async function readAllPages<S extends z.ZodTypeAny>(
 }
 
 export async function loginManagement(identifier: string, countryCode: string, password: string) {
-  return request('auth/login', loginResponseSchema, {
+  return request('auth/management/password/login', loginResponseSchema, {
     method: 'POST',
     body: {
       identifier: identifier.trim(),
@@ -198,7 +200,7 @@ export async function completeInitialManagementPassword(
   passwordChangeToken: string,
   newPassword: string,
 ) {
-  const response = await fetch('/api/management/auth/initial-change', {
+  const response = await fetch('/api/auth/management/password/initial-change', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
@@ -224,7 +226,7 @@ export async function completeInitialManagementPassword(
 }
 
 export async function logoutManagement() {
-  const response = await fetch('/api/management/auth/logout', {
+  const response = await fetch('/api/auth/management/logout', {
     method: 'POST',
     headers: { 'X-Management-CSRF': csrfToken() },
     credentials: 'same-origin',
@@ -236,7 +238,7 @@ export async function logoutManagement() {
 }
 
 export function getManagementMe() {
-  return request('me', managementMeSchema)
+  return request('management/me', managementMeSchema)
 }
 
 export function createManagementAuthChallenge(
@@ -275,6 +277,90 @@ export function listChamberCertifications(chamberId: string) {
 
 export function listChamberImportCandidates(chamberId: string) {
   return readAllPages(`chambers/${encodeURIComponent(chamberId)}/import-candidates`, importCandidateSchema)
+}
+
+export async function listCurrentChamberEnterprises() {
+  const items: z.output<typeof currentChamberEnterprisePageSchema>['items'] = []
+  let cursor: string | null = null
+  for (let page = 0; page < 20; page += 1) {
+    const result: z.output<typeof currentChamberEnterprisePageSchema> = await request(
+      `management/chamber/enterprises${queryString({ cursor, limit: 100 })}`,
+      currentChamberEnterprisePageSchema,
+    )
+    items.push(...result.items)
+    if (!result.page.has_more || !result.page.next_cursor) break
+    cursor = result.page.next_cursor
+  }
+  return items
+}
+
+export function listPlatformEnterprises(input: {
+  keyword?: string
+  status?: 'enabled' | 'disabled'
+  cursor?: string | null
+  limit?: number
+} = {}) {
+  return request(
+    `management/enterprises${queryString({
+      keyword: input.keyword?.trim(),
+      status: input.status,
+      cursor: input.cursor,
+      limit: input.limit ?? 20,
+    })}`,
+    currentChamberEnterprisePageSchema,
+  )
+}
+
+export type PlatformEnterpriseWriteInput = {
+  name: string
+  country_code: string
+  enterprise_type: 1 | 2 | 3
+  description?: string | null
+  contact_phone?: string | null
+  contact_email?: string | null
+  declared_credit_code?: string | null
+}
+
+export function createPlatformEnterprise(body: PlatformEnterpriseWriteInput) {
+  return request('management/enterprises', currentChamberEnterpriseSchema, {
+    method: 'POST',
+    idempotencyKey: newIdempotencyKey(),
+    body,
+  })
+}
+
+export function updatePlatformEnterprise(
+  enterpriseId: string,
+  expectedVersion: number,
+  body: PlatformEnterpriseWriteInput,
+) {
+  return request(
+    `management/enterprises/${encodeURIComponent(enterpriseId)}${queryString({
+      expected_version: expectedVersion,
+    })}`,
+    currentChamberEnterpriseSchema,
+    {
+      method: 'PUT',
+      idempotencyKey: newIdempotencyKey(),
+      body,
+    },
+  )
+}
+
+export function setPlatformEnterpriseStatus(
+  enterpriseId: string,
+  expectedVersion: number,
+  status: 'enabled' | 'disabled',
+) {
+  return request(
+    `management/enterprises/${encodeURIComponent(enterpriseId)}/status`,
+    currentChamberEnterpriseSchema,
+    {
+      method: 'POST',
+      idempotencyKey: newIdempotencyKey(),
+      body: { status, expected_version: expectedVersion },
+    },
+  )
 }
 
 export function listChamberCertificationLevels(chamberId: string, input: {
@@ -655,7 +741,7 @@ export function createManagementStaffAccount(
   },
 ) {
   return request(
-    'management/staff-accounts',
+    'management/staff',
     staffAssignmentSchema,
     {
       method: 'POST',
@@ -681,7 +767,16 @@ export function createChamberAdminAccount(
     staffAssignmentSchema,
     {
       method: 'POST',
-      body,
+      body: {
+        ...body,
+        role_template: 'chamber_admin',
+        menu_keys: [
+          'dashboard',
+          'chamber_management',
+          'account_governance',
+          'audit_export',
+        ],
+      },
       idempotencyKey: newIdempotencyKey(),
     },
   )

@@ -8,7 +8,6 @@ import {
   createChamberAdminAccount,
   createManagementStaffAccount,
   getManagementMenuCatalog,
-  listChamberAdminAccounts,
   listManagementStaff,
   updateManagementStaff,
 } from '@/api/client/management'
@@ -106,18 +105,12 @@ export function AccountMembersScreen() {
     setLoading(true)
     setError(null)
     try {
-      const staffRequest = workspace.kind === 'chamber'
-        ? listChamberAdminAccounts(workspace.id, {
-          keyword,
-          status: statusFilter,
-          limit: 20,
-        })
-        : listManagementStaff({
-          keyword,
-          roleTemplate: roleFilter,
-          status: statusFilter,
-          limit: 20,
-        })
+      const staffRequest = listManagementStaff({
+        keyword,
+        roleTemplate: workspace.kind === 'chamber' ? 'chamber_admin' : roleFilter,
+        status: statusFilter,
+        limit: 20,
+      })
       const [staff, menuCatalog] = await Promise.all([
         staffRequest,
         workspace.kind === 'platform' ? getManagementMenuCatalog() : Promise.resolve(null),
@@ -221,20 +214,13 @@ export function AccountMembersScreen() {
     if (!nextCursor) return
     setLoadingMore(true)
     try {
-      const result = workspace?.kind === 'chamber'
-        ? await listChamberAdminAccounts(workspace.id, {
-          keyword,
-          status: statusFilter,
-          cursor: nextCursor,
-          limit: 20,
-        })
-        : await listManagementStaff({
-          keyword,
-          roleTemplate: roleFilter,
-          status: statusFilter,
-          cursor: nextCursor,
-          limit: 20,
-        })
+      const result = await listManagementStaff({
+        keyword,
+        roleTemplate: workspace?.kind === 'chamber' ? 'chamber_admin' : roleFilter,
+        status: statusFilter,
+        cursor: nextCursor,
+        limit: 20,
+      })
       setItems((current) => [...current, ...result.items])
       setNextCursor(result.page.next_cursor ?? null)
     } catch (nextError) {

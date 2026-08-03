@@ -4,6 +4,7 @@ import type {
   ImportCandidateDto,
   ImportJobDto,
   ManagementEnterpriseDto,
+  CurrentChamberEnterpriseDto,
 } from '@/api/generated/huameng'
 import type {
   ChamberAffiliation,
@@ -80,5 +81,44 @@ export function mapCandidate(dto: ImportCandidateDto): ImportCandidate {
     resolvedEnterpriseId: dto.resolved_enterprise_id,
     createdAt: dto.created_at,
     updatedAt: dto.updated_at,
+  }
+}
+
+export function mapCurrentChamberAffiliation(
+  dto: CurrentChamberEnterpriseDto,
+): ChamberAffiliation {
+  return {
+    affiliationId: dto.enterprise_id,
+    chamberId: dto.chamber_id ?? '',
+    enterpriseId: dto.enterprise_id,
+    enterpriseName: dto.name,
+    status: dto.status === 'enabled' ? 'active' : 'suspended',
+    joinedAt: dto.created_at,
+    platformVerificationStatus: dto.is_verified
+      ? 'verified'
+      : dto.audit_status === 'rejected'
+        ? 'rejected'
+        : dto.audit_status === 'pending'
+          ? 'pending'
+          : 'unverified',
+    version: dto.version,
+  }
+}
+
+export function mapCurrentChamberCertification(
+  dto: CurrentChamberEnterpriseDto,
+): ChamberCertification | null {
+  if (!dto.chamber_level_id || !dto.chamber_level_name) return null
+  return {
+    certificationId: `${dto.enterprise_id}:${dto.chamber_level_id}`,
+    affiliationId: dto.enterprise_id,
+    enterpriseId: dto.enterprise_id,
+    enterpriseName: dto.name,
+    levelCode: dto.chamber_level_id,
+    levelName: dto.chamber_level_name,
+    validFrom: dto.created_at,
+    validUntil: dto.chamber_level_expire_at ?? dto.updated_at,
+    status: dto.status === 'enabled' ? 'active' : 'inactive_affiliation',
+    platformVerificationStatus: dto.is_verified ? 'verified' : 'unverified',
   }
 }

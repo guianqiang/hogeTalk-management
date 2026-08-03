@@ -45,14 +45,6 @@ export interface HomeBannerRow {
   link_url: string
 }
 
-export interface PortalHomeStatus {
-  current_revision: number
-  published_revision: number | null
-  publication_version: number | null
-  version: number
-  published_at: string | null
-}
-
 export interface ManagementAuditRecord {
   id: string
   sequence: number
@@ -76,13 +68,6 @@ export interface ManagementAuditOperator {
 export interface SiteConfigResponse {
   section: 'basic' | 'seo' | 'contact' | 'social'
   payload: JsonRecord
-  current_revision: number
-  published_revision: number | null
-  publication_version: number | null
-  version: number
-  published_at: string | null
-  created_at: string
-  updated_at: string
 }
 
 interface ModuleRoute {
@@ -100,26 +85,25 @@ interface ModuleRoute {
     | 'country'
     | 'account'
     | 'plan'
-    | 'notification'
 }
 
 const liveModules: Record<string, ModuleRoute> = {
-  news: { path: 'management/cms/articles', query: { content_type: 'news' }, kind: 'article' },
-  investment: { path: 'management/cms/articles', query: { content_type: 'invest' }, kind: 'article' },
-  associations: { path: 'management/cms/articles', query: { content_type: 'association' }, kind: 'article' },
-  parks: { path: 'management/cms/articles', query: { content_type: 'park' }, kind: 'article' },
+  news: { path: 'management/cms/articles', query: { contentType: 'news' }, kind: 'article' },
+  investment: { path: 'management/cms/articles', query: { contentType: 'invest' }, kind: 'article' },
+  associations: { path: 'management/cms/articles', query: { contentType: 'association' }, kind: 'article' },
+  parks: { path: 'management/cms/articles', query: { contentType: 'park' }, kind: 'article' },
   'article-categories': {
     path: 'management/cms/categories',
-    query: { content_type: 'news' },
+    query: { contentType: 'news' },
     kind: 'cms-category',
   },
-  tour: { path: 'management/products', query: { kind: 'tour' }, kind: 'product' },
-  education: { path: 'management/products', query: { kind: 'education' }, kind: 'product' },
-  'supply-chain': { path: 'management/products', query: { kind: 'goods' }, kind: 'product' },
+  tour: { path: 'management/products', query: { type: 'tour' }, kind: 'product' },
+  education: { path: 'management/products', query: { type: 'edu' }, kind: 'product' },
+  'supply-chain': { path: 'management/products', query: { type: 'goods' }, kind: 'product' },
   activities: {
-    path: 'management/activities',
-    query: { scope_type: 'platform', scope_id: 'hm' },
-    kind: 'activity',
+    path: 'management/cms/articles',
+    query: { contentType: 'activity' },
+    kind: 'article',
   },
   chambers: { path: 'management/chambers', kind: 'chamber' },
   inquiries: { path: 'management/inquiries', kind: 'inquiry' },
@@ -128,11 +112,6 @@ const liveModules: Record<string, ModuleRoute> = {
   countries: { path: 'management/portal/countries', kind: 'country' },
   accounts: { path: 'management/accounts', kind: 'account' },
   plans: { path: 'management/plans', kind: 'plan' },
-  notifications: {
-    path: 'management/notifications',
-    query: { scope_type: 'platform', scope_id: 'hm' },
-    kind: 'notification',
-  },
 }
 
 function csrfToken() {
@@ -159,7 +138,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Idempotency-Key', idempotencyKey())
   }
 
-  const response = await fetch(`/api/management/${path}`, {
+  const response = await fetch(`/api/${path}`, {
     ...init,
     headers,
     credentials: 'same-origin',
@@ -202,11 +181,51 @@ function asJsonRecord(value: unknown): JsonRecord {
     : {}
 }
 
+async function getPortalConfig(key: string) {
+  return request<unknown>(`management/portal/site-config/${encodeURIComponent(key)}`)
+}
+
+export type ManagementCountryOption = {
+  code: string
+  name: string
+}
+
+export async function listManagementCountryOptions(): Promise<ManagementCountryOption[]> {
+  const result = pageItems(await request<unknown>('management/portal/countries?limit=100'))
+  return result.items
+    .filter((item) => Number(item.status) === 1 && typeof item.code === 'string')
+    .map((item) => ({
+      code: String(item.code).toUpperCase(),
+      name: String(item.name ?? item.code),
+    }))
+}
+
+async function savePortalConfig(key: string, value: unknown, remark: string) {
+  await request<void>(`management/portal/site-config/${encodeURIComponent(key)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ value, remark }),
+  })
+}
+
 async function getPortalHome() {
-  return asJsonRecord(await request<unknown>('management/portal/home'))
+  const sections = await getPortalConfig('sections')
+  return { sections: Array.isArray(sections) ? sections : [] } satisfies JsonRecord
 }
 
 function recordFromDto(dto: JsonRecord, route: ModuleRoute): ScaffoldedRecord {
+  dto.category_id ??= dto.categoryId
+  dto.category_name ??= dto.categoryName
+  dto.content_type ??= dto.contentType
+  dto.enterprise_id ??= dto.enterpriseId
+  dto.enterprise_name ??= dto.enterpriseName
+  dto.is_top ??= dto.isTop
+  dto.is_home ??= dto.isHome
+  if (dto.is_top !== undefined) dto.is_top = dto.is_top === true || Number(dto.is_top) === 1
+  if (dto.is_home !== undefined) dto.is_home = dto.is_home === true || Number(dto.is_home) === 1
+  dto.created_at ??= dto.createdAt
+  dto.updated_at ??= dto.updatedAt
+  dto.name_en ??= dto.nameEn
+  dto.image_urls ??= dto.images
   const id = String(
     dto.id
       ?? (route.kind === 'chamber' ? dto.enterprise_id : undefined)
@@ -219,13 +238,19 @@ function recordFromDto(dto: JsonRecord, route: ModuleRoute): ScaffoldedRecord {
       ?? dto.display_name
       ?? dto.legal_name
       ?? dto.code
-      ?? dto.notification_type
       ?? id,
   )
   let status = String(dto.status ?? dto.lifecycle_status ?? 'active')
-  if (route.kind === 'product') status = String(dto.review_status ?? dto.publication_status ?? status)
-  if (route.kind === 'notification') status = dto.read === true ? 'read' : 'unread'
+  if (route.kind === 'article') status = ({ 0: 'draft', 1: 'published', 2: 'archived' } as Record<number, string>)[Number(dto.status)] ?? status
+  if (route.kind === 'product') status = ({ 0: 'draft', 1: 'published', 2: 'disabled' } as Record<number, string>)[Number(dto.status)] ?? status
+  if (['cms-category', 'product-category', 'partner', 'country'].includes(route.kind)) {
+    status = Number(dto.status) === 1 ? 'active' : 'inactive'
+  }
+  if (route.kind === 'inquiry') {
+    status = ({ 0: 'pending', 1: 'processing', 2: 'completed', 3: 'invalid' } as Record<number, string>)[Number(dto.status)] ?? status
+  }
   if (route.kind === 'activity') status = String(dto.status ?? dto.registration_availability ?? status)
+  if (route.kind === 'chamber') status = Number(dto.status) === 1 ? 'active' : 'inactive'
 
   const subtitle = asString(
     dto.subtitle
@@ -252,12 +277,12 @@ function recordFromDto(dto: JsonRecord, route: ModuleRoute): ScaffoldedRecord {
     id,
     title,
     subtitle,
-    cover_url: asString(dto.cover_access_url ?? dto.cover_url ?? dto.logo_access_url ?? dto.logo_url),
+    cover_url: asString(dto.cover_access_url ?? dto.cover ?? dto.logo_access_url ?? dto.logo ?? dto.flag),
     category,
     country: asString(dto.country ?? dto.country_code ?? dto.code),
     status,
-    sort: asNumber(dto.sort_order),
-    is_home: typeof dto.is_home === 'boolean' ? dto.is_home : undefined,
+    sort: asNumber(dto.sort ?? dto.sort_order),
+    is_home: typeof dto.is_home === 'boolean' ? dto.is_home : Number(dto.is_home) === 1,
     created_at: asString(dto.created_at) ?? undefined,
     updated_at: asString(dto.updated_at) ?? undefined,
     version: asNumber(dto.version),
@@ -271,10 +296,16 @@ function pageItems(body: unknown): { items: JsonRecord[]; nextCursor: string | n
     Boolean(item) && typeof item === 'object' && !Array.isArray(item)
   )) : []
   const page = value.page && typeof value.page === 'object' ? value.page as JsonRecord : {}
+  const pageNumber = asNumber(value.page)
+  const pageSize = asNumber(value.size)
+  const total = asNumber(value.total)
+  const pageHasMore = pageNumber !== undefined && pageSize !== undefined && total !== undefined
+    ? pageNumber * pageSize < total
+    : false
   return {
     items,
-    nextCursor: asString(value.next_cursor ?? page.next_cursor),
-    hasMore: value.has_more === true || page.has_more === true,
+    nextCursor: asString(value.next_cursor ?? page.next_cursor) ?? (pageHasMore ? String(pageNumber! + 1) : null),
+    hasMore: value.has_more === true || page.has_more === true || pageHasMore,
   }
 }
 
@@ -287,11 +318,30 @@ function toQuery(route: ModuleRoute, params: {
   const query = new URLSearchParams(route.query)
   if (params.keyword) query.set('keyword', params.keyword)
   if (params.status && params.status !== 'all') {
-    const key = route.kind === 'product' ? 'review_status' : route.kind === 'notification' ? 'read_status' : 'status'
-    query.set(key, params.status)
+    const key = 'status'
+    query.set(
+      key,
+      route.kind === 'chamber'
+        ? params.status === 'active' ? '1' : '0'
+        : route.kind === 'inquiry'
+          ? String(({ pending: 0, processing: 1, completed: 2, invalid: 3 } as Record<string, number>)[params.status])
+          : ['cms-category', 'product-category', 'partner', 'country'].includes(route.kind)
+            ? params.status === 'active' ? '1' : '0'
+            : route.kind === 'article'
+              ? String(({ draft: 0, published: 1, archived: 2 } as Record<string, number>)[params.status])
+              : route.kind === 'product'
+                ? String(({ draft: 0, published: 1, disabled: 2 } as Record<string, number>)[params.status])
+          : params.status,
+    )
   }
-  if (params.cursor) query.set('cursor', params.cursor)
-  query.set('limit', String(params.limit ?? 20))
+  const pageBased = ['article', 'cms-category', 'product', 'product-category', 'inquiry', 'chamber'].includes(route.kind)
+  if (pageBased) {
+    query.set('page', params.cursor ?? '1')
+    query.set('size', String(params.limit ?? 20))
+  } else {
+    if (params.cursor) query.set('cursor', params.cursor)
+    query.set('limit', String(params.limit ?? 20))
+  }
   return query
 }
 
@@ -323,22 +373,22 @@ export async function listScaffoldedRecords(
 
 export async function listCmsCategoryOptions(resource: string) {
   const module = moduleFromResource(resource)
-  const contentType = module ? liveModules[module]?.query?.content_type : null
+  const contentType = module ? liveModules[module]?.query?.contentType : null
   if (!contentType) return []
-  const query = new URLSearchParams({ content_type: contentType, status: 'active', limit: '100' })
+  const query = new URLSearchParams({ contentType, status: '1', page: '1', size: '100' })
   const route: ModuleRoute = {
     path: 'management/cms/categories',
-    query: { content_type: contentType },
+    query: { contentType },
     kind: 'cms-category',
   }
   const result = pageItems(await request<unknown>(`management/cms/categories?${query.toString()}`))
   return result.items.map((item) => recordFromDto(item, route))
 }
 
-function articlePayload(module: string, payload: JsonRecord, expectedVersion?: number) {
-  const contentType = liveModules[module]?.query?.content_type ?? 'news'
+function articlePayload(module: string, payload: JsonRecord) {
+  const contentType = liveModules[module]?.query?.contentType ?? 'news'
   return {
-    ...(expectedVersion === undefined ? { content_type: contentType } : { action: 'update', expected_version: expectedVersion }),
+    content_type: contentType,
     category_id: payload.category_id || null,
     title: String(payload.title ?? ''),
     subtitle: payload.subtitle || null,
@@ -347,12 +397,12 @@ function articlePayload(module: string, payload: JsonRecord, expectedVersion?: n
     country: payload.country || null,
     tags: Array.isArray(payload.tags) ? payload.tags : [],
     source: payload.source || null,
-    cover_url: payload.cover_url || null,
-    image_urls: Array.isArray(payload.image_urls) ? payload.image_urls : [],
-    sort_order: Number(payload.sort ?? 0),
-    is_top: payload.is_top === true,
-    is_home: payload.is_home === true,
-    ...(expectedVersion === undefined ? { status: payload.status === 'published' ? 'published' : 'draft' } : {}),
+    cover: payload.cover_url || null,
+    images: Array.isArray(payload.image_urls) ? payload.image_urls : [],
+    sort: Number(payload.sort ?? 0),
+    is_top: payload.is_top === true ? 1 : 0,
+    is_home: payload.is_home === true ? 1 : 0,
+    status: payload.status === 'published' ? 1 : payload.status === 'archived' ? 2 : 0,
   }
 }
 
@@ -361,57 +411,60 @@ function createPayload(module: string, payload: JsonRecord) {
   if (route.kind === 'article') return articlePayload(module, payload)
   if (route.kind === 'cms-category') {
     return {
-      content_type: route.query?.content_type ?? 'news',
+      content_type: route.query?.contentType ?? 'news',
       name: String(payload.title ?? ''),
       slug: String(payload.link ?? payload.title ?? '').trim().toLowerCase().replace(/\s+/g, '-'),
       parent_id: payload.parent_id || null,
-      sort_order: Number(payload.sort ?? 0),
-      status: payload.status === 'inactive' ? 'inactive' : 'active',
+      sort: Number(payload.sort ?? 0),
+      status: payload.status === 'inactive' ? 0 : 1,
     }
   }
   if (route.kind === 'product-category') {
     return {
-      kind: 'goods',
+      type: 'goods',
       name: String(payload.title ?? ''),
       slug: String(payload.link ?? payload.title ?? '').trim().toLowerCase().replace(/\s+/g, '-'),
-      parent_id: payload.parent_id || null,
-      sort_order: Number(payload.sort ?? 0),
-      status: payload.status === 'inactive' ? 'inactive' : 'active',
+      sort: Number(payload.sort ?? 0),
+      status: payload.status === 'inactive' ? 0 : 1,
     }
   }
   if (route.kind === 'partner') {
     return {
       name: String(payload.title ?? ''),
-      logo_url: String(payload.logo_url ?? ''),
-      website_url: payload.link || null,
+      logo: String(payload.logo_url ?? ''),
+      link: payload.link || null,
       category: payload.partner_category || 'enterprise',
-      sort_order: Number(payload.sort ?? 0),
-      status: payload.status === 'inactive' ? 'inactive' : 'active',
+      sort: Number(payload.sort ?? 0),
+      is_home: payload.is_featured === true ? 1 : 0,
+      status: payload.status === 'inactive' ? 0 : 1,
     }
   }
   if (route.kind === 'country') {
     return {
       code: String(payload.country ?? '').toUpperCase(),
-      name_zh: String(payload.title ?? ''),
+      name: String(payload.title ?? ''),
       name_en: String(payload.subtitle ?? ''),
-      flag_url: payload.link || null,
-      sort_order: Number(payload.sort ?? 0),
-      status: payload.status === 'inactive' ? 'inactive' : 'active',
+      flag: payload.link || null,
+      sort: Number(payload.sort ?? 0),
+      status: payload.status === 'inactive' ? 0 : 1,
     }
   }
   if (route.kind === 'chamber') {
     return {
-      legal_name: String(payload.title ?? ''),
-      display_name: String(payload.display_name ?? payload.title ?? ''),
+      name: String(payload.title ?? ''),
+      name_en: payload.subtitle || null,
       country_code: String(payload.country ?? '').toUpperCase(),
-      logo_url: payload.logo_url || null,
+      logo: payload.logo_url || null,
       description: String(payload.introduction ?? ''),
-      registered_name: payload.registered_name || null,
-      founded_on: payload.founded_on || null,
-      registered_place: payload.registered_place || null,
+      founded_at: payload.founded_on || null,
+      reg_place: payload.registered_place || null,
       address: payload.address || null,
-      sort_order: Number(payload.sort ?? 0),
-      is_featured: payload.is_featured === true,
+      contact_phone: payload.contact_phone || null,
+      contact_email: payload.contact_email || null,
+      website_url: payload.website_url || null,
+      sort: Number(payload.sort ?? 0),
+      is_home: payload.is_featured === true ? 1 : 0,
+      status: payload.status === 'inactive' ? 0 : 1,
     }
   }
   throw new ManagementApiError(422, 'E_INPUT_INVALID', '当前模块不支持在管理端新建', null, null)
@@ -445,7 +498,7 @@ export async function updateScaffoldedRecord(
 function updateAction(module: string, item: ScaffoldedRecord | undefined, payload: JsonRecord) {
   const route = liveModules[module]
   const version = Number(payload.expected_version ?? item?.version ?? 0)
-  if (route.kind === 'article') return articlePayload(module, payload, version)
+  if (route.kind === 'article') return articlePayload(module, payload)
   if (route.kind === 'cms-category') {
     return {
       action: 'update',
@@ -543,22 +596,130 @@ export async function actOnScaffoldedRecord(
   delete cleanPayload.__item
   const version = Number(cleanPayload.expected_version ?? existing?.version ?? 0)
 
+  if (route.kind === 'inquiry') {
+    const status = ({ pending: 0, processing: 1, completed: 2, invalid: 3 } as Record<string, number>)[String(cleanPayload.status)]
+    const result = await request<JsonRecord>(`${route.path}/${encodeURIComponent(id)}/handle`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status,
+        remark: cleanPayload.follow_up_note || null,
+      }),
+    })
+    return recordFromDto(result, route)
+  }
+
+  if (route.kind === 'article') {
+    if (action === 'enable') {
+      const result = await request<JsonRecord>(`${route.path}/${encodeURIComponent(id)}/publish`, {
+        method: 'POST',
+      })
+      return recordFromDto(result, route)
+    }
+    const source = action === 'update'
+      ? cleanPayload
+      : await request<JsonRecord>(`${route.path}/${encodeURIComponent(id)}`)
+    const body = action === 'update'
+      ? articlePayload(module, source)
+      : articlePayload(module, {
+          title: source.title,
+          subtitle: source.subtitle,
+          summary: source.summary,
+          content: source.content,
+          country: source.country,
+          tags: source.tags,
+          source: source.source,
+          category_id: source.category_id ?? source.categoryId,
+          cover_url: source.cover,
+          image_urls: source.images,
+          sort: source.sort,
+          is_top: source.is_top ?? source.isTop,
+          is_home: source.is_home ?? source.isHome,
+          status: action === 'disable' ? 'draft' : source.status,
+        })
+    const result = await request<JsonRecord>(`${route.path}/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    })
+    return recordFromDto(result, route)
+  }
+
+  if (['cms-category', 'product-category', 'partner', 'country'].includes(route.kind)) {
+    const current = existing?.raw ?? {}
+    const nextStatus = action === 'enable' ? 1 : action === 'disable' ? 0 : undefined
+    let body: JsonRecord
+    if (action === 'update') {
+      body = createPayload(module, cleanPayload)
+    } else if (route.kind === 'cms-category') {
+      body = {
+        content_type: current.content_type ?? current.contentType,
+        name: current.name,
+        parent_id: current.parent_id ?? current.parentId ?? null,
+        slug: current.slug ?? null,
+        sort: current.sort ?? 0,
+        status: nextStatus ?? current.status,
+      }
+    } else if (route.kind === 'product-category') {
+      body = {
+        type: current.type,
+        name: current.name,
+        slug: current.slug ?? null,
+        sort: current.sort ?? 0,
+        status: nextStatus ?? current.status,
+      }
+    } else if (route.kind === 'partner') {
+      body = {
+        name: current.name,
+        logo: current.logo,
+        link: current.link ?? null,
+        category: current.category ?? 'enterprise',
+        sort: current.sort ?? 0,
+        is_home: current.is_home ?? current.isHome ?? 0,
+        status: nextStatus ?? current.status,
+      }
+    } else {
+      body = {
+        name: current.name,
+        name_en: current.name_en ?? current.nameEn ?? null,
+        code: current.code ?? null,
+        flag: current.flag ?? null,
+        sort: current.sort ?? 0,
+        status: nextStatus ?? current.status,
+      }
+    }
+    const result = await request<JsonRecord>(`${route.path}/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    })
+    return recordFromDto(result, route)
+  }
+
   if (route.kind === 'chamber' && action === 'update') {
     const result = await request<JsonRecord>(`${route.path}/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
+      method: 'PUT',
+      body: JSON.stringify(createPayload(module, cleanPayload)),
+    })
+    return recordFromDto(result, route)
+  }
+
+  if (route.kind === 'chamber' && ['enable', 'disable', 'restore'].includes(action)) {
+    const current = existing?.raw ?? {}
+    const result = await request<JsonRecord>(`${route.path}/${encodeURIComponent(id)}`, {
+      method: 'PUT',
       body: JSON.stringify({
-        expected_version: version,
-        legal_name: cleanPayload.title,
-        display_name: cleanPayload.display_name,
-        country_code: cleanPayload.country,
-        logo_url: cleanPayload.logo_url || null,
-        description: cleanPayload.introduction ?? '',
-        registered_name: cleanPayload.registered_name || null,
-        founded_on: cleanPayload.founded_on || null,
-        registered_place: cleanPayload.registered_place || null,
-        address: cleanPayload.address || null,
-        sort_order: Number(cleanPayload.sort ?? 0),
-        is_featured: cleanPayload.is_featured === true,
+        name: current.name ?? existing?.title ?? '',
+        name_en: current.name_en ?? null,
+        country_code: current.country_code ?? existing?.country ?? 'CN',
+        logo: current.logo ?? null,
+        description: current.description ?? null,
+        founded_at: current.founded_at ?? null,
+        reg_place: current.reg_place ?? null,
+        address: current.address ?? null,
+        contact_phone: current.contact_phone ?? null,
+        contact_email: current.contact_email ?? null,
+        website_url: current.website_url ?? null,
+        sort: current.sort ?? existing?.sort ?? 0,
+        is_home: current.is_home ?? 0,
+        status: action === 'disable' ? 0 : 1,
       }),
     })
     return recordFromDto(result, route)
@@ -576,9 +737,9 @@ export async function actOnScaffoldedRecord(
 
 export async function exportScaffoldedRecords(resource: string, params: Record<string, string> = {}) {
   const module = moduleFromResource(resource)
-  const path = module === 'inquiries' ? 'management/inquiry-exports' : `${resource}/export`
+  const path = module === 'inquiries' ? 'management/inquiries/export' : `${resource}/export`
   const query = new URLSearchParams(params)
-  const response = await fetch(`/api/management/${path}?${query.toString()}`, {
+  const response = await fetch(`/api/${path}?${query.toString()}`, {
     headers: { Accept: 'text/csv' },
     credentials: 'same-origin',
     cache: 'no-store',
@@ -607,7 +768,7 @@ async function uploadSmallManagementMedia(
   purpose: 'cms' | 'product' | 'enterprise' | 'chamber' | 'profile',
 ) {
   const query = new URLSearchParams({ purpose, filename: file.name })
-  const response = await fetch(`/api/management/management/media/uploads/content?${query}`, {
+  const response = await fetch(`/api/management/media/uploads/content?${query}`, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -709,8 +870,8 @@ export async function uploadManagementMedia(
 }
 
 export async function getHomeStats() {
-  const home = await getPortalHome()
-  const stats = Array.isArray(home.stats) ? home.stats : []
+  const value = await getPortalConfig('stats')
+  const stats = Array.isArray(value) ? value : []
   return {
     items: stats.map((item, index) => {
       const row = item && typeof item === 'object' ? item as JsonRecord : {}
@@ -720,13 +881,12 @@ export async function getHomeStats() {
         value: String(row.value ?? ''),
       }
     }),
-    version: asNumber(home.version),
   }
 }
 
 export async function getHomeBanners() {
-  const home = await getPortalHome()
-  const banners = Array.isArray(home.banners) ? home.banners : []
+  const value = await getPortalConfig('banners')
+  const banners = Array.isArray(value) ? value : []
   return {
     items: banners.map((item, index) => {
       const row = item && typeof item === 'object' ? item as JsonRecord : {}
@@ -738,69 +898,28 @@ export async function getHomeBanners() {
         link_url: String(row.link_url ?? ''),
       }
     }),
-    status: {
-      current_revision: Number(home.current_revision ?? 0),
-      published_revision: typeof home.published_revision === 'number' ? home.published_revision : null,
-      publication_version: typeof home.publication_version === 'number' ? home.publication_version : null,
-      version: Number(home.version ?? 0),
-      published_at: asString(home.published_at),
-    } satisfies PortalHomeStatus,
   }
 }
 
 export async function saveHomeBanners(items: HomeBannerRow[]) {
-  const current = await getPortalHome()
-  const result = await request<JsonRecord>('management/portal/home', {
-    method: 'PUT',
-    body: JSON.stringify({
-      expected_version: Number(current.version ?? 0),
-      stats: Array.isArray(current.stats) ? current.stats : [],
-      banners: items.map((item) => ({
-        title: item.title,
-        subtitle: item.subtitle || null,
-        media_url: item.media_url,
-        link_url: item.link_url || null,
-      })),
-      sections: Array.isArray(current.sections) ? current.sections : [],
-    }),
-  })
-  return {
-    items,
-    version: Number(result.version ?? 0),
-  }
+  const banners = items.map((item) => ({
+    title: item.title,
+    subtitle: item.subtitle || null,
+    media_url: item.media_url,
+    link_url: item.link_url || null,
+  }))
+  await savePortalConfig('banners', banners, '首页轮播图')
+  return { items }
 }
 
-export async function actOnPortalHome(action: 'publish' | 'withdraw' | 'rollback', revision?: number) {
-  const current = await getPortalHome()
-  return request<JsonRecord>('management/portal/home/action', {
-    method: 'POST',
-    body: JSON.stringify({
-      action,
-      expected_version: Number(current.version ?? 0),
-      revision: revision ?? null,
-      reason: null,
-    }),
-  })
-}
-
-export async function saveHomeStats(items: Array<{ label: string; value: string }>, version = 0) {
-  const current = await getPortalHome()
-  const result = await request<JsonRecord>('management/portal/home', {
-    method: 'PUT',
-    body: JSON.stringify({
-      expected_version: version || Number(current.version ?? 0),
-      stats: items,
-      banners: Array.isArray(current.banners) ? current.banners : [],
-      sections: Array.isArray(current.sections) ? current.sections : [],
-    }),
-  })
+export async function saveHomeStats(items: Array<{ label: string; value: string }>) {
+  await savePortalConfig('stats', items, '首页统计数字')
   return {
     items: items.map((item, index) => ({
       id: `stat-${index}`,
       label: item.label,
       value: item.value,
     })),
-    version: asNumber(result.version),
   }
 }
 
@@ -813,7 +932,7 @@ const homeSectionRoutes: Record<string, ModuleRoute> = {
   association: liveModules.associations,
   activity: {
     path: 'management/cms/articles',
-    query: { content_type: 'activity' },
+    query: { contentType: 'activity' },
     kind: 'article',
   },
   park: liveModules.parks,
@@ -848,15 +967,8 @@ function homeSections(home: JsonRecord) {
 }
 
 async function saveHomeSections(home: JsonRecord, sections: JsonRecord[]) {
-  return request<JsonRecord>('management/portal/home', {
-    method: 'PUT',
-    body: JSON.stringify({
-      expected_version: Number(home.version ?? 0),
-      stats: Array.isArray(home.stats) ? home.stats : [],
-      banners: Array.isArray(home.banners) ? home.banners : [],
-      sections,
-    }),
-  })
+  void home
+  await savePortalConfig('sections', sections, '首页内容楼层')
 }
 
 export async function listHomeSection(
@@ -866,10 +978,12 @@ export async function listHomeSection(
   const route = homeSectionRoutes[sectionKey]
   if (!route) return { items: [], next_cursor: null, has_more: false }
   if (!params.homeOnly) {
-    const query = new URLSearchParams(route.query)
-    if (params.keyword) query.set('keyword', params.keyword)
-    if (params.cursor) query.set('cursor', params.cursor)
-    query.set('limit', String(params.limit ?? 20))
+    const query = toQuery(route, {
+      keyword: params.keyword,
+      status: 'all',
+      cursor: params.cursor,
+      limit: params.limit,
+    })
     const result = await request<JsonRecord>(`${route.path}?${query.toString()}`)
     const page = pageItems(result)
     return {
@@ -884,6 +998,26 @@ export async function listHomeSection(
   const references = Array.isArray(section?.items)
     ? section.items.filter((item): item is JsonRecord => Boolean(item) && typeof item === 'object')
     : []
+
+  if (route.kind === 'partner') {
+    const listed = pageItems(await request<unknown>(`${route.path}?limit=100`))
+    const byId = new Map(
+      listed.items.map((item) => {
+        const record = recordFromDto(item, route)
+        return [record.id, record] as const
+      }),
+    )
+    return {
+      items: references.flatMap((reference) => {
+        const id = asString(reference.resource_id)
+        const record = id ? byId.get(id) : null
+        return record ? [{ ...record, is_home: true }] : []
+      }),
+      next_cursor: null,
+      has_more: false,
+    }
+  }
+
   const items = await Promise.all(references.map(async (reference) => {
     const id = asString(reference.resource_id)
     if (!id) return null
@@ -980,34 +1114,20 @@ export async function changeManagementPassword(newPassword: string, confirmation
   })
 }
 
-export function getSiteConfig(section: SiteConfigResponse['section']) {
-  return request<SiteConfigResponse | null>(`management/portal/site-config/${section}`)
+export async function getSiteConfig(section: SiteConfigResponse['section']) {
+  const value = await request<unknown>(`management/portal/site-config/${section}`)
+  return { section, payload: asJsonRecord(value) } satisfies SiteConfigResponse
 }
 
 export function updateSiteConfig(
   section: SiteConfigResponse['section'],
   payload: JsonRecord,
-  expectedVersion: number,
+  _expectedVersion?: number,
 ) {
-  return request<SiteConfigResponse>(`management/portal/site-config/${section}`, {
+  return request<void>(`management/portal/site-config/${section}`, {
     method: 'PUT',
-    body: JSON.stringify({ expected_version: expectedVersion, payload }),
-  })
-}
-
-export function actOnSiteConfig(
-  section: SiteConfigResponse['section'],
-  body: {
-    action: 'publish' | 'withdraw' | 'rollback'
-    expected_version: number
-    revision?: number | null
-    reason?: string | null
-  },
-) {
-  return request<SiteConfigResponse>(`management/portal/site-config/${section}/action`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
+    body: JSON.stringify({ value: payload, remark: `站点配置：${section}` }),
+  }).then(() => ({ section, payload }))
 }
 
 function auditQuery(input: {
@@ -1065,7 +1185,7 @@ export function listManagementAuditOperators(input: {
 }
 
 export async function exportManagementAudit(input: Parameters<typeof auditQuery>[0]) {
-  const response = await fetch('/api/management/management/audit-logs/export', {
+  const response = await fetch('/api/management/audit-logs/export', {
     method: 'POST',
     headers: {
       Accept: 'text/csv, application/json',

@@ -43,7 +43,7 @@ export function DashboardScreen() {
     let active = true
     setPlatformError(null)
     void requestManagementResource<Record<string, unknown>>(
-      'management/portal/dashboard?scope_type=platform&scope_id=hm',
+      'management/portal/dashboard',
     )
       .then((result) => {
         if (active) setPlatformStats(result)

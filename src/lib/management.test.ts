@@ -73,9 +73,7 @@ describe('frozen management contract projection', () => {
         'chamber_management',
         'content_management',
         'product_management',
-        'activity_operations',
         'inquiry_cooperation',
-        'notification_center',
         'account_governance',
         'billing_governance',
         'audit_export',
@@ -93,7 +91,8 @@ describe('frozen management contract projection', () => {
     expect(labels).toContain('认领审核')
     expect(labels).toContain('后台人员')
     expect(labels).toContain('操作审计')
-    expect(labels).toHaveLength(26)
+    expect(labels).not.toContain('业务通知')
+    expect(labels).toHaveLength(25)
   })
 
   it('distinguishes content and governance operators only by effective menu keys', () => {
@@ -109,8 +108,6 @@ describe('frozen management contract projection', () => {
       title: '内容运营',
       menu_keys: [
         'content_management',
-        'activity_operations',
-        'notification_center',
         'audit_export',
       ],
     })
@@ -137,7 +134,7 @@ describe('frozen management contract projection', () => {
     expect(contentWorkspace.staffTitle).toBe('内容运营')
     expect(contentLabels).toContain('首页管理')
     expect(contentLabels).toContain('近期活动')
-    expect(contentLabels).toContain('业务通知')
+    expect(contentLabels).not.toContain('业务通知')
     expect(contentLabels).toContain('操作审计')
     expect(contentLabels).not.toContain('企业管理')
     expect(contentLabels).not.toContain('商会管理')
@@ -179,6 +176,7 @@ describe('frozen management contract projection', () => {
   it('projects the current single-enterprise management identity', () => {
     const me = managementMeSchema.parse({
       account_id: 'acc_account0001',
+      must_change_password: false,
       enterprise: {
         enterprise_id: 'ent_platform0001',
         membership_id: 'mem_member00001',
@@ -195,9 +193,7 @@ describe('frozen management contract projection', () => {
           'chamber_management',
           'content_management',
           'product_management',
-          'activity_operations',
           'inquiry_cooperation',
-          'notification_center',
           'account_governance',
           'billing_governance',
           'audit_export',
@@ -206,6 +202,7 @@ describe('frozen management contract projection', () => {
     })
 
     expect(me.enterprise.enterprise_id).toBe('ent_platform0001')
+    expect(me.must_change_password).toBe(false)
     expect(me.enterprise.title).toBe('平台主管')
     expect(me.enterprise.menu_keys).toContain('enterprise_auth')
   })
@@ -249,9 +246,7 @@ describe('frozen management contract projection', () => {
           'chamber_management',
           'content_management',
           'product_management',
-          'activity_operations',
           'inquiry_cooperation',
-          'notification_center',
           'account_governance',
           'billing_governance',
           'audit_export',

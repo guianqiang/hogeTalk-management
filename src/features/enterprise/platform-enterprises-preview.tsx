@@ -1,26 +1,24 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Building2,
-  Download,
   FileSearch,
   Filter,
   LoaderCircle,
   Pencil,
   Plus,
-  Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  actOnScaffoldedRecord,
-  createScaffoldedRecord,
-  exportScaffoldedRecords,
-  listScaffoldedRecords,
-  updateScaffoldedRecord,
-  type ScaffoldedRecord,
-} from '@/api/client/scaffolded-management'
+  createPlatformEnterprise,
+  listPlatformEnterprises,
+  setPlatformEnterpriseStatus,
+  updatePlatformEnterprise,
+} from '@/api/client/management'
+import type { CurrentChamberEnterpriseDto } from '@/api/generated/huameng'
 import { PageHeading } from '@/components/management/page-heading'
+import { CountrySelect } from '@/components/management/country-select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -42,43 +40,38 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-const resource = 'management/enterprises'
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  anchor.click()
-  URL.revokeObjectURL(url)
+const enterpriseTypeLabels: Record<number, string> = {
+  1: '供应企业',
+  2: '采购企业',
+  3: '综合企业',
 }
 
 export function PlatformEnterprisesPreview() {
-  const importInputRef = useRef<HTMLInputElement>(null)
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState('all')
-  const [items, setItems] = useState<ScaffoldedRecord[]>([])
+  const [items, setItems] = useState<CurrentChamberEnterpriseDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
   const [formOpen, setFormOpen] = useState(false)
-  const [selected, setSelected] = useState<ScaffoldedRecord | null>(null)
-  const [legalName, setLegalName] = useState('')
-  const [displayName, setDisplayName] = useState('')
-  const [enterpriseType, setEnterpriseType] = useState('company')
+  const [selected, setSelected] = useState<CurrentChamberEnterpriseDto | null>(null)
+  const [name, setName] = useState('')
+  const [enterpriseType, setEnterpriseType] = useState('3')
   const [country, setCountry] = useState('CN')
-  const [identifierType, setIdentifierType] = useState('')
   const [identifierValue, setIdentifierValue] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [importing, setImporting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const result = await listScaffoldedRecords(resource, { keyword, status, limit: 20 })
+      const result = await listPlatformEnterprises({
+        keyword,
+        status: status === 'all' ? undefined : status as 'enabled' | 'disabled',
+        limit: 100,
+      })
       setItems(result.items)
     } catch (nextError) {
       setError(nextError)
@@ -93,27 +86,25 @@ export function PlatformEnterprisesPreview() {
 
   useEffect(() => {
     if (!formOpen) return
-    setLegalName(selected?.title ?? '')
-    setDisplayName(selected?.subtitle ?? '')
-    setEnterpriseType(selected?.category ?? 'company')
-    setCountry(selected?.country ?? 'CN')
-    setIdentifierType('')
-    setIdentifierValue('')
-    setPhone('')
-    setEmail('')
-    setDescription('')
+    setName(selected?.name ?? '')
+    setEnterpriseType(String(selected?.enterprise_type ?? 3))
+    setCountry(selected?.country_code ?? 'CN')
+    setIdentifierValue(selected?.declared_credit_code ?? '')
+    setPhone(selected?.contact_phone ?? '')
+    setEmail(selected?.contact_email ?? '')
+    setDescription(selected?.description ?? '')
   }, [formOpen, selected])
 
   const stats = useMemo(() => [
     ['企业主体', String(items.length), '当前查询范围内的企业主体'],
-    ['待认领', String(items.filter((item) => item.status === 'unclaimed').length), '尚未形成 owner membership'],
-    ['待平台认证', String(items.filter((item) => item.status === 'pending_verification').length), '已提交 L1–L3 申请'],
-    ['重复候选', String(items.filter((item) => item.status === 'duplicate_candidate').length), '只产生候选，不自动合并'],
+    ['待审核', String(items.filter((item) => item.audit_status === 'pending').length), '等待平台审核的企业'],
+    ['已认证', String(items.filter((item) => item.is_verified).length), '已完成企业认证'],
+    ['已停用', String(items.filter((item) => item.status === 'disabled').length), '当前不可用的企业'],
   ], [items])
 
-  function upsertItem(item: ScaffoldedRecord) {
-    setItems((current) => current.some((entry) => entry.id === item.id)
-      ? current.map((entry) => entry.id === item.id ? item : entry)
+  function upsertItem(item: CurrentChamberEnterpriseDto) {
+    setItems((current) => current.some((entry) => entry.enterprise_id === item.enterprise_id)
+      ? current.map((entry) => entry.enterprise_id === item.enterprise_id ? item : entry)
       : [item, ...current])
   }
 
@@ -122,35 +113,30 @@ export function PlatformEnterprisesPreview() {
     setFormOpen(true)
   }
 
-  function openEdit(item: ScaffoldedRecord) {
+  function openEdit(item: CurrentChamberEnterpriseDto) {
     setSelected(item)
     setFormOpen(true)
   }
 
   async function saveEnterprise() {
-    if (!legalName.trim()) {
-      toast.error('请填写企业法定名称')
+    if (!name.trim()) {
+      toast.error('请填写企业名称')
       return
     }
     setSubmitting(true)
     try {
       const payload = {
-        legal_name: legalName.trim(),
-        display_name: displayName.trim() || legalName.trim(),
-        type: enterpriseType,
+        name: name.trim(),
         country_code: country.trim().toUpperCase(),
-        authoritative_identifier: identifierValue.trim()
-          ? { type: identifierType.trim(), value: identifierValue.trim() }
-          : null,
-        contacts: [
-          ...(phone.trim() ? [{ type: 'phone', value: phone.trim() }] : []),
-          ...(email.trim() ? [{ type: 'email', value: email.trim() }] : []),
-        ],
+        enterprise_type: Number(enterpriseType) as 1 | 2 | 3,
         description: description.trim() || null,
+        contact_phone: phone.trim() || null,
+        contact_email: email.trim() || null,
+        declared_credit_code: identifierValue.trim() || null,
       }
       const item = selected
-        ? await updateScaffoldedRecord(resource, selected.id, payload)
-        : await createScaffoldedRecord(resource, payload)
+        ? await updatePlatformEnterprise(selected.enterprise_id, selected.version, payload)
+        : await createPlatformEnterprise(payload)
       upsertItem(item)
       setFormOpen(false)
       toast.success(selected ? '企业资料已更新' : '企业主体已创建')
@@ -161,43 +147,13 @@ export function PlatformEnterprisesPreview() {
     }
   }
 
-  async function changeStatus(item: ScaffoldedRecord) {
-    const action = item.status === 'active' ? 'disable' : 'enable'
+  async function changeStatus(item: CurrentChamberEnterpriseDto) {
+    const nextStatus = item.status === 'enabled' ? 'disabled' : 'enabled'
     try {
-      upsertItem(await actOnScaffoldedRecord(resource, item.id, action))
-      toast.success(action === 'disable' ? '企业已停用' : '企业已启用')
+      upsertItem(await setPlatformEnterpriseStatus(item.enterprise_id, item.version, nextStatus))
+      toast.success(nextStatus === 'disabled' ? '企业已停用' : '企业已启用')
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '操作失败，请稍后重试')
-    }
-  }
-
-  async function importEnterprises(file: File) {
-    setImporting(true)
-    try {
-      const content = await file.text()
-      await createScaffoldedRecord('management/enterprise-imports', {
-        source_file_name: file.name,
-        content,
-      })
-      toast.success('企业导入任务已创建')
-      await load()
-    } catch (nextError) {
-      toast.error(nextError instanceof Error ? nextError.message : '导入失败，请稍后重试')
-    } finally {
-      setImporting(false)
-      if (importInputRef.current) importInputRef.current.value = ''
-    }
-  }
-
-  async function exportEnterprises() {
-    try {
-      const blob = await exportScaffoldedRecords(resource, {
-        ...(keyword ? { keyword } : {}),
-        ...(status !== 'all' ? { status } : {}),
-      })
-      downloadBlob(blob, 'huameng-enterprises.csv')
-    } catch (nextError) {
-      toast.error(nextError instanceof Error ? nextError.message : '导出失败，请稍后重试')
     }
   }
 
@@ -209,26 +165,10 @@ export function PlatformEnterprisesPreview() {
         description="统一检索企业主体，跟进企业资料、认证、认领和重复候选。"
         icon={Building2}
         action={
-          <div className="flex gap-2">
-            <input
-              ref={importInputRef}
-              className="hidden"
-              type="file"
-              accept=".csv,text/csv"
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) void importEnterprises(file)
-              }}
-            />
-            <Button variant="outline" disabled={importing} onClick={() => importInputRef.current?.click()}>
-              {importing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              批量导入
-            </Button>
-            <Button onClick={openCreate}>
-              <Plus className="h-4 w-4" />
-              新建企业
-            </Button>
-          </div>
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" />
+            新建企业
+          </Button>
         }
       />
 
@@ -260,10 +200,8 @@ export function PlatformEnterprisesPreview() {
             <SelectTrigger className="w-full xl:w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部企业状态</SelectItem>
-              <SelectItem value="active">正常</SelectItem>
-              <SelectItem value="unclaimed">待认领</SelectItem>
-              <SelectItem value="pending_verification">待平台认证</SelectItem>
-              <SelectItem value="inactive">已停用</SelectItem>
+              <SelectItem value="enabled">正常</SelectItem>
+              <SelectItem value="disabled">已停用</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={() => void load()}>
@@ -286,21 +224,21 @@ export function PlatformEnterprisesPreview() {
               </thead>
               <tbody className="divide-y">
                 {items.map((item) => (
-                  <tr key={item.id} className="text-sm">
+                  <tr key={item.enterprise_id} className="text-sm">
                     <td className="px-5 py-4">
-                      <p className="font-medium">{item.title}</p>
-                      <p className="mt-1 font-data text-xs text-muted-foreground">{item.id}</p>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="mt-1 font-data text-xs text-muted-foreground">{item.enterprise_id}</p>
                     </td>
-                    <td className="px-5 py-4 text-muted-foreground">{item.category ?? '企业'} · {item.country ?? '—'}</td>
-                    <td className="px-5 py-4"><span className="rounded-full border px-2 py-1 text-xs">{item.status}</span></td>
-                    <td className="px-5 py-4 text-muted-foreground">{item.updated_at ?? item.created_at ?? '—'}</td>
+                    <td className="px-5 py-4 text-muted-foreground">{enterpriseTypeLabels[item.enterprise_type]} · {item.country_code}</td>
+                    <td className="px-5 py-4"><span className="rounded-full border px-2 py-1 text-xs">{item.status === 'enabled' ? '正常' : '已停用'}</span></td>
+                    <td className="px-5 py-4 text-muted-foreground">{item.updated_at}</td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-1">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(item)}>
                           <Pencil className="h-4 w-4" />编辑
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => void changeStatus(item)}>
-                          {item.status === 'active' ? '停用' : '启用'}
+                          {item.status === 'enabled' ? '停用' : '启用'}
                         </Button>
                       </div>
                     </td>
@@ -332,12 +270,8 @@ export function PlatformEnterprisesPreview() {
               </div>
             </div>
           ) : null}
-          <div className="flex items-center justify-between border-t px-5 py-3 text-xs text-muted-foreground">
+          <div className="border-t px-5 py-3 text-xs text-muted-foreground">
             <span>共 {items.length} 条</span>
-            <Button variant="ghost" size="sm" onClick={() => void exportEnterprises()}>
-              <Download className="h-4 w-4" />
-              导出
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -346,32 +280,28 @@ export function PlatformEnterprisesPreview() {
         <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selected ? '编辑企业主体' : '新建企业主体'}</DialogTitle>
-            <DialogDescription>企业主体、联系方式和权威标识分别保存，海外企业允许不填写信用代码。</DialogDescription>
+            <DialogDescription>企业名称统一使用一个字段；海外企业允许不填写信用代码。</DialogDescription>
           </DialogHeader>
           <div className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="enterprise-legal-name">企业法定名称</Label>
-                <Input id="enterprise-legal-name" value={legalName} onChange={(event) => setLegalName(event.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="enterprise-display-name">展示名称</Label>
-                <Input id="enterprise-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+                <Label htmlFor="enterprise-name">企业名称</Label>
+                <Input id="enterprise-name" value={name} onChange={(event) => setName(event.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>企业类型</Label>
                 <Select value={enterpriseType} onValueChange={setEnterpriseType}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="company">企业</SelectItem>
-                    <SelectItem value="chamber">商会</SelectItem>
-                    <SelectItem value="platform">平台主体</SelectItem>
+                    <SelectItem value="1">供应企业</SelectItem>
+                    <SelectItem value="2">采购企业</SelectItem>
+                    <SelectItem value="3">综合企业</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="enterprise-country">国家或地区</Label>
-                <Input id="enterprise-country" value={country} onChange={(event) => setCountry(event.target.value)} />
+                <CountrySelect value={country} onValueChange={setCountry} />
               </div>
             </div>
             <div className="rounded-lg border bg-muted/20 p-4">
@@ -381,11 +311,7 @@ export function PlatformEnterprisesPreview() {
               </p>
               <div className="mt-3 grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="enterprise-id-type">标识类型</Label>
-                  <Input id="enterprise-id-type" value={identifierType} onChange={(event) => setIdentifierType(event.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="enterprise-id-value">标识值</Label>
+                  <Label htmlFor="enterprise-id-value">统一社会信用代码或登记编号</Label>
                   <Input id="enterprise-id-value" value={identifierValue} onChange={(event) => setIdentifierValue(event.target.value)} />
                 </div>
               </div>

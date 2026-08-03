@@ -23,7 +23,6 @@ import {
 import { toast } from 'sonner'
 import {
   actOnScaffoldedRecord,
-  actOnSiteConfig,
   createScaffoldedRecord,
   exportScaffoldedRecords,
   getSiteConfig,
@@ -41,6 +40,7 @@ import {
 } from '@/api/client/management'
 import type { StaffAssignmentDto } from '@/api/generated/huameng-platform'
 import { PageHeading } from '@/components/management/page-heading'
+import { CountrySelect } from '@/components/management/country-select'
 import { RichTextEditor } from '@/components/management/rich-text-editor'
 import { HomeCurationScreen } from '@/features/legacy/home-curation-screen'
 import {
@@ -310,12 +310,10 @@ function recordColumnValue(item: ScaffoldedRecord, column: string) {
   if (column.includes('管理员')) return String(raw.admin_count ?? raw.manager_count ?? '—')
   if (column.includes('官网')) return String(raw.website_url ?? '—')
   if (column.includes('标识')) {
-    if (raw.logo_access_url) return '图片可用'
-    return raw.logo_url ? '需重新上传' : '未上传'
+    return raw.logo || raw.logo_url ? '图片可用' : '未上传'
   }
   if (column.includes('旗帜')) {
-    if (raw.flag_access_url) return '图片可用'
-    return raw.flag_url ? '需重新上传' : '未上传'
+    return raw.flag || raw.flag_url ? '图片可用' : '未上传'
   }
   if (column.includes('重点展示')) return raw.is_featured === true ? '是' : '否'
   if (column.includes('排序')) return String(item.sort ?? 0)
@@ -598,13 +596,10 @@ function ContentForm({ config, open, onOpenChange, resource, initial, onSaved }:
     setSubmitting(true)
     try {
       const imageUrls = await Promise.all(images.map((file) => uploadManagementMedia(file, 'cms')))
-      const existingCoverUrl = initial?.raw?.cover_access_url
-        ? initial.raw.cover_url
-        : null
-      const existingImageUrls = Array.isArray(initial?.raw?.image_urls)
-        && Array.isArray(initial?.raw?.image_access_urls)
-        ? initial.raw.image_urls.filter((_, index) => Boolean((initial.raw?.image_access_urls as unknown[])[index]))
-        : []
+      const existingCoverUrl = String(initial?.raw?.cover ?? initial?.raw?.cover_url ?? '') || null
+      const existingImageUrls = Array.isArray(initial?.raw?.images)
+        ? initial.raw.images
+        : Array.isArray(initial?.raw?.image_urls) ? initial.raw.image_urls : []
       const payload = {
         title: title.trim(),
         subtitle: subtitle.trim() || null,
@@ -725,11 +720,6 @@ function ContentForm({ config, open, onOpenChange, resource, initial, onSaved }:
                 </div>
               </div>
             </label>
-            {Boolean(initial?.raw?.cover_url) && !initial?.raw?.cover_access_url && images.length === 0 && (
-              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-                原封面媒体已失效，请重新上传封面。若直接保存，系统会清理失效引用，避免后续内容更新失败。
-              </p>
-            )}
             <div className="space-y-2">
               <Label>正文</Label>
               <RichTextEditor value={content} onChange={setContent} />
@@ -748,13 +738,7 @@ function ContentForm({ config, open, onOpenChange, resource, initial, onSaved }:
               </div>
               <div className="space-y-2">
                 <Label htmlFor="legacy-country">关联国家或地区</Label>
-                <Input
-                  id="legacy-country"
-                  value={country}
-                  onChange={(event) => setCountry(event.target.value)}
-                  placeholder="两位代码，例如：TH"
-                  maxLength={2}
-                />
+                <CountrySelect value={country} onValueChange={setCountry} allowEmpty />
               </div>
             </div>
             <div className="space-y-2">
@@ -831,11 +815,9 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
   const isPartner = config.title === '合作伙伴'
   const isCategory = config.title === '商品分类' || config.title === '资讯栏目'
   const [name, setName] = useState('')
-  const [displayName, setDisplayName] = useState('')
   const [englishName, setEnglishName] = useState('')
   const [countryCode, setCountryCode] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
-  const [registeredName, setRegisteredName] = useState('')
   const [foundedOn, setFoundedOn] = useState('')
   const [registeredPlace, setRegisteredPlace] = useState('')
   const [address, setAddress] = useState('')
@@ -849,22 +831,13 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
   const [featured, setFeatured] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const expiredExistingMedia = Boolean(
-    initial && (
-      isCountry
-        ? initial.raw?.flag_url && !initial.raw?.flag_access_url
-        : initial.raw?.logo_url && !initial.raw?.logo_access_url
-    ),
-  )
 
   useEffect(() => {
     if (!open) return
-    setName(String(initial?.raw?.legal_name ?? initial?.title ?? ''))
-    setDisplayName(String(initial?.raw?.display_name ?? initial?.title ?? ''))
+    setName(initial?.title ?? '')
     setEnglishName(initial?.subtitle ?? '')
     setCountryCode(initial?.country ?? '')
-    setLogoUrl(initial?.raw?.logo_access_url ? String(initial.raw.logo_url ?? '') : '')
-    setRegisteredName(String(initial?.raw?.registered_name ?? ''))
+    setLogoUrl(String(initial?.raw?.logo ?? initial?.raw?.logo_url ?? ''))
     setFoundedOn(String(initial?.raw?.founded_on ?? ''))
     setRegisteredPlace(String(initial?.raw?.registered_place ?? ''))
     setAddress(String(initial?.raw?.address ?? ''))
@@ -873,7 +846,8 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
     setLink(String(
       initial?.raw?.website_url
         ?? initial?.raw?.slug
-        ?? (initial?.raw?.flag_access_url ? initial.raw.flag_url : '')
+        ?? initial?.raw?.flag
+        ?? initial?.raw?.flag_url
         ?? '',
     ))
     setPartnerCategory(String(initial?.raw?.category ?? 'enterprise'))
@@ -892,10 +866,6 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
   async function save() {
     if (!name.trim()) {
       toast.error(`请填写${config.noun}名称`)
-      return
-    }
-    if (isChamber && !displayName.trim()) {
-      toast.error('请填写商会展示名称')
       return
     }
     if ((isChamber || isCountry) && !/^[A-Za-z]{2}$/.test(countryCode.trim())) {
@@ -922,11 +892,9 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
     try {
       const payload = {
         title: name.trim(),
-        display_name: displayName.trim() || null,
         subtitle: englishName.trim() || null,
         country: countryCode.trim().toUpperCase() || null,
         logo_url: logoUrl.trim() || null,
-        registered_name: registeredName.trim() || null,
         founded_on: foundedOn || null,
         registered_place: registeredPlace.trim() || null,
         address: address.trim() || null,
@@ -969,13 +937,13 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="record-name">
-              {isCountry ? '中文名称' : isChamber ? '法定名称' : `${config.noun}名称`}
+              {isCountry ? '中文名称' : `${config.noun}名称`}
             </Label>
             <Input
               id="record-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder={isChamber ? '请输入登记的商会全称' : `请输入${config.noun}名称`}
+              placeholder={`请输入${config.noun}名称`}
             />
           </div>
           {isCountry && (
@@ -1021,9 +989,6 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
                     />
                   </label>
                 </div>
-                {expiredExistingMedia && !link && (
-                  <p className="text-xs leading-5 text-amber-700">原旗帜图片已失效，请重新上传；保存时会清理失效引用。</p>
-                )}
               </div>
             </>
           )}
@@ -1031,23 +996,8 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
             <>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="chamber-display-name">展示名称</Label>
-                  <Input
-                    id="chamber-display-name"
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    placeholder="用于网站和后台展示"
-                  />
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="chamber-country">所属国家或地区代码</Label>
-                  <Input
-                    id="chamber-country"
-                    value={countryCode}
-                    onChange={(event) => setCountryCode(event.target.value)}
-                    placeholder="例如：CN"
-                    maxLength={2}
-                  />
+                  <CountrySelect value={countryCode} onValueChange={setCountryCode} />
                 </div>
               </div>
               <div className="space-y-2">
@@ -1081,20 +1031,8 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
                     />
                   </label>
                 </div>
-                {expiredExistingMedia && !logoUrl && (
-                  <p className="text-xs leading-5 text-amber-700">原 Logo 媒体已失效，请重新上传；保存时会清理失效引用。</p>
-                )}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="chamber-registered-name">登记名称</Label>
-                  <Input
-                    id="chamber-registered-name"
-                    value={registeredName}
-                    onChange={(event) => setRegisteredName(event.target.value)}
-                    placeholder="如与法定名称一致可不填"
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="chamber-founded-on">成立日期</Label>
                   <Input
@@ -1162,9 +1100,6 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
                     />
                   </label>
                 </div>
-                {expiredExistingMedia && !logoUrl && (
-                  <p className="text-xs leading-5 text-amber-700">原标识媒体已失效，请重新上传后再保存，避免继续引用不可用图片。</p>
-                )}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -1492,9 +1427,9 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
           weibo_url: values.weibo_url?.trim() || null,
         }
       }
-      const result = await updateSiteConfig(tab, payload, config?.version ?? 0)
+      const result = await updateSiteConfig(tab, payload)
       setConfig(result)
-      toast.success('站点配置草稿已保存')
+      toast.success('站点配置已保存')
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '保存失败，请稍后重试')
     } finally {
@@ -1512,27 +1447,6 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
       toast.error(nextError instanceof Error ? nextError.message : '站点 Logo 上传失败')
     } finally {
       setUploadingSiteLogo(false)
-    }
-  }
-
-  async function publicationAction(action: 'publish' | 'withdraw') {
-    if (!config) {
-      toast.error('请先保存当前配置')
-      return
-    }
-    setSubmitting(true)
-    try {
-      const result = await actOnSiteConfig(tab, {
-        action,
-        expected_version: config.version,
-      })
-      setConfig(result)
-      toast.success(action === 'publish' ? '站点配置已发布' : '站点配置已撤回')
-    } catch (nextError) {
-      toast.error(nextError instanceof Error ? nextError.message : '发布状态更新失败')
-      await loadSettings(tab)
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -1556,13 +1470,6 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
                   正在读取当前配置…
                 </div>
               )}
-              <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span>草稿版本 {config?.version ?? 0}</span>
-                <span>·</span>
-                <span>当前修订 {config?.current_revision ?? 0}</span>
-                <span>·</span>
-                <span>{config?.published_revision ? `已发布修订 ${config.published_revision}` : '尚未发布'}</span>
-              </div>
               <TabsContent value="basic" className="mt-0 space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="site-name">站点名称</Label>
@@ -1631,14 +1538,10 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
                 <div className="space-y-2"><Label htmlFor="site-weibo">微博主页</Label><Input id="site-weibo" {...field('weibo_url')} placeholder="https://weibo.com/..." /></div>
               </TabsContent>
               <div className="mt-6 flex justify-end gap-2 border-t pt-5">
-                {config?.published_revision ? (
-                  <Button type="button" variant="outline" disabled={submitting} onClick={() => void publicationAction('withdraw')}>撤回发布</Button>
-                ) : null}
                 <Button type="submit" disabled={submitting}>
                   {submitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
                   保存配置
                 </Button>
-                <Button type="button" disabled={submitting || !config} onClick={() => void publicationAction('publish')}>发布当前修订</Button>
               </div>
             </form>
           </Tabs>

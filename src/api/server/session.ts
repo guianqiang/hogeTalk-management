@@ -14,7 +14,7 @@ const sessionCookie = {
 }
 
 function apiBaseUrl() {
-  const value = (process.env.MANAGEMENT_API_BASE_URL ?? 'http://127.0.0.1:8790').replace(/\/+$/, '')
+  const value = (process.env.MANAGEMENT_API_BASE_URL ?? 'http://127.0.0.1:8790/v1').replace(/\/+$/, '')
   const url = new URL(value)
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new Error('MANAGEMENT_API_BASE_URL must use http or https')
@@ -77,7 +77,7 @@ type SessionRotationResult = {
 const sessionRotationFlights = new Map<string, Promise<SessionRotationResult>>()
 
 async function performManagementSessionRotation(refreshToken: string): Promise<SessionRotationResult> {
-  const response = await callManagementBackend('/v1/auth/management/refresh', {
+  const response = await callManagementBackend('/auth/management/refresh', {
     method: 'POST',
     headers: {
       Accept: 'application/json',

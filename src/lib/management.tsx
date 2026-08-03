@@ -13,17 +13,14 @@ import {
   createChamberEnterpriseImport,
   getChamberEnterpriseImport,
   getManagementMe,
-  listChamberAffiliations,
-  listChamberCertifications,
-  listChamberImportCandidates,
+  listCurrentChamberEnterprises,
   loginManagement,
   logoutManagement,
 } from '@/api/client/management'
 import { getManagementAccount } from '@/api/client/scaffolded-management'
 import {
-  mapAffiliation,
-  mapCandidate,
-  mapCertification,
+  mapCurrentChamberAffiliation,
+  mapCurrentChamberCertification,
   mapImportJob,
   mapWorkspace,
 } from '@/api/mappers/management'
@@ -130,17 +127,15 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
       },
     }))
     try {
-      const [affiliations, certifications, candidates] = await Promise.all([
-        listChamberAffiliations(workspaceId),
-        listChamberCertifications(workspaceId),
-        listChamberImportCandidates(workspaceId),
-      ])
+      const enterprises = await listCurrentChamberEnterprises()
       setWorkspaceData((current) => ({
         ...current,
         [workspaceId]: {
-          affiliations: affiliations.map(mapAffiliation),
-          certifications: certifications.map(mapCertification),
-          candidates: candidates.map(mapCandidate),
+          affiliations: enterprises.map(mapCurrentChamberAffiliation),
+          certifications: enterprises
+            .map(mapCurrentChamberCertification)
+            .filter((item): item is NonNullable<typeof item> => item !== null),
+          candidates: [],
           importJobs: current[workspaceId]?.importJobs ?? [],
           loading: false,
           error: null,

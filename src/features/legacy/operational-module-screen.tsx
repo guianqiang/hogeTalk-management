@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import {
   Activity,
-  Bell,
   Boxes,
   ChevronDown,
   CircleDollarSign,
@@ -12,7 +11,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  ShieldCheck,
   Trash2,
   UsersRound,
 } from 'lucide-react'
@@ -56,7 +54,7 @@ import { useManagement } from '@/lib/management'
 import { isEnterpriseAccountRecord } from '@/lib/account-scope'
 
 type JsonRecord = Record<string, unknown>
-type ModuleKey = 'tour' | 'education' | 'supply-chain' | 'activities' | 'accounts' | 'plans' | 'notifications'
+type ModuleKey = 'tour' | 'education' | 'supply-chain' | 'activities' | 'accounts' | 'plans'
 
 const moduleMeta: Record<ModuleKey, {
   title: string
@@ -67,41 +65,35 @@ const moduleMeta: Record<ModuleKey, {
 }> = {
   tour: {
     title: '文化旅游',
-    description: '审核文旅产品、补件、发布治理与首页推荐。',
+    description: '查看文旅产品并管理发布状态。',
     noun: '文旅产品',
     icon: Boxes,
     statuses: [
-      { value: 'submitted', label: '待审核' },
-      { value: 'under_review', label: '审核中' },
-      { value: 'needs_more_info', label: '待补件' },
-      { value: 'approved', label: '已批准' },
-      { value: 'rejected', label: '已驳回' },
+      { value: 'draft', label: '草稿' },
+      { value: 'published', label: '已发布' },
+      { value: 'disabled', label: '已停用' },
     ],
   },
   education: {
     title: '教育交流',
-    description: '审核教育产品、补件、发布治理与首页推荐。',
+    description: '查看教育交流产品并管理发布状态。',
     noun: '教育产品',
     icon: Boxes,
     statuses: [
-      { value: 'submitted', label: '待审核' },
-      { value: 'under_review', label: '审核中' },
-      { value: 'needs_more_info', label: '待补件' },
-      { value: 'approved', label: '已批准' },
-      { value: 'rejected', label: '已驳回' },
+      { value: 'draft', label: '草稿' },
+      { value: 'published', label: '已发布' },
+      { value: 'disabled', label: '已停用' },
     ],
   },
   'supply-chain': {
     title: '供应链平台',
-    description: '审核商品、处理补件和下架，并维护展示排序。',
+    description: '查看供应链商品并管理发布状态。',
     noun: '商品',
     icon: Boxes,
     statuses: [
-      { value: 'submitted', label: '待审核' },
-      { value: 'under_review', label: '审核中' },
-      { value: 'needs_more_info', label: '待补件' },
-      { value: 'approved', label: '已批准' },
-      { value: 'rejected', label: '已驳回' },
+      { value: 'draft', label: '草稿' },
+      { value: 'published', label: '已发布' },
+      { value: 'disabled', label: '已停用' },
     ],
   },
   activities: {
@@ -112,7 +104,6 @@ const moduleMeta: Record<ModuleKey, {
     statuses: [
       { value: 'draft', label: '草稿' },
       { value: 'published', label: '已发布' },
-      { value: 'cancelled', label: '已取消' },
       { value: 'archived', label: '已归档' },
     ],
   },
@@ -138,16 +129,6 @@ const moduleMeta: Record<ModuleKey, {
       { value: 'retired', label: '退役' },
     ],
   },
-  notifications: {
-    title: '业务通知',
-    description: '处理当前管理范围内的系统通知和风险提醒。',
-    noun: '通知',
-    icon: Bell,
-    statuses: [
-      { value: 'unread', label: '未读' },
-      { value: 'read', label: '已读' },
-    ],
-  },
 }
 
 const productModules = new Set<ModuleKey>(['tour', 'education', 'supply-chain'])
@@ -168,6 +149,8 @@ const actionLabels: Record<string, string> = {
   update: '更新套餐',
   set_status: '变更状态',
   mark_read: '标记已读',
+  enable: '发布',
+  disable: '停用',
   create: '新建套餐',
 }
 
@@ -456,14 +439,7 @@ function ActionPayloadFields({
 
 function actionsFor(module: ModuleKey, item: ScaffoldedRecord) {
   if (productModules.has(module)) {
-    const actions: string[] = []
-    if (item.status === 'submitted') actions.push('start_review')
-    if (item.status === 'submitted' || item.status === 'under_review') {
-      actions.push('request_changes', 'approve', 'reject')
-    }
-    if (item.raw?.publication_status === 'published') actions.push('force_withdraw')
-    if (item.raw?.publication_status !== 'archived') actions.push('curate')
-    return actions
+    return item.status === 'published' ? ['disable'] : ['enable']
   }
   if (module === 'accounts') {
     return item.status === 'suspended'
@@ -471,29 +447,13 @@ function actionsFor(module: ModuleKey, item: ScaffoldedRecord) {
       : ['suspend', 'force_logout', 'assign_subscription', 'cancel_subscription', 'adjust_quota']
   }
   if (module === 'plans') return ['update', 'set_status']
-  if (module === 'notifications' && item.status === 'unread') return ['mark_read']
   return []
 }
 
 function initialActionPayload(module: ModuleKey, item: ScaffoldedRecord, action: string) {
   const version = item.version ?? Number(item.raw?.version ?? 0)
   if (productModules.has(module)) {
-    if (action === 'request_changes') {
-      return { action, expected_version: version, reason: '', required_items: [] }
-    }
-    if (action === 'reject' || action === 'force_withdraw') {
-      return { action, expected_version: version, reason: '' }
-    }
-    if (action === 'curate') {
-      return {
-        action,
-        expected_version: version,
-        sort_order: Number(item.raw?.sort_order ?? 0),
-        is_top: item.raw?.is_top === true,
-        is_home: item.raw?.is_home === true,
-      }
-    }
-    return { action, expected_version: version }
+    return { status: action === 'enable' ? 1 : 2 }
   }
   if (module === 'accounts') {
     if (action === 'assign_subscription') {
@@ -575,7 +535,7 @@ function initialPlanCreatePayload() {
 }
 
 function actionPath(module: ModuleKey, item: ScaffoldedRecord, action: string) {
-  if (productModules.has(module)) return `management/products/${encodeURIComponent(item.id)}/action`
+  if (productModules.has(module)) return `management/products/${encodeURIComponent(item.id)}/status`
   if (module === 'accounts') {
     if (action === 'assign_subscription' || action === 'cancel_subscription') {
       return `management/accounts/${encodeURIComponent(item.id)}/subscription/action`
@@ -584,7 +544,7 @@ function actionPath(module: ModuleKey, item: ScaffoldedRecord, action: string) {
     return `management/accounts/${encodeURIComponent(item.id)}/action`
   }
   if (module === 'plans') return `management/plans/${encodeURIComponent(item.id)}/action`
-  return `management/notifications/${encodeURIComponent(item.id)}/action`
+  throw new Error('当前模块没有可执行的动作')
 }
 
 const detailFieldLabels: Record<string, string> = {
@@ -616,7 +576,6 @@ const detailFieldLabels: Record<string, string> = {
   is_top: '置顶',
   is_home: '首页推荐',
   message: '通知内容',
-  notification_type: '通知类型',
   read: '阅读状态',
   registrations: '报名记录',
   minutes_sends: '纪要发送记录',
@@ -783,22 +742,7 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
   async function openDetails(item: ScaffoldedRecord) {
     setSelected(item)
     setRelated(null)
-    if (module === 'activities') {
-      try {
-        const query = `scope_type=${item.raw?.scope_type ?? 'platform'}&scope_id=${item.raw?.scope_id ?? 'hm'}&limit=20`
-        const [registrations, minutes] = await Promise.all([
-          requestManagementResource<JsonRecord>(
-            `management/activities/${encodeURIComponent(item.id)}/registrations?${query}`,
-          ),
-          requestManagementResource<JsonRecord>(
-            `management/activities/${encodeURIComponent(item.id)}/minutes-sends?${query}`,
-          ),
-        ])
-        setRelated({ registrations, minutes_sends: minutes })
-      } catch (nextError) {
-        toast.error(nextError instanceof Error ? nextError.message : '活动关联记录加载失败')
-      }
-    } else if (module === 'accounts') {
+    if (module === 'accounts') {
       try {
         const [subscription, quota] = await Promise.all([
           requestManagementResource<JsonRecord>(
@@ -865,45 +809,18 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
     }
     setSubmitting(true)
     try {
-      const result = await requestManagementResource<JsonRecord>(
+      await requestManagementResource<JsonRecord>(
         actionName === 'create'
           ? 'management/plans'
           : actionPath(module, selected as ScaffoldedRecord, actionName),
         { method: 'POST', body: JSON.stringify(payload) },
       )
-      if (module === 'notifications') {
-        setItems((current) => current.map((item) => item.id === selected?.id
-          ? { ...item, status: 'read', raw: result }
-          : item))
-      } else {
-        await load()
-      }
+      await load()
       setActionName(null)
       setSelected(null)
       toast.success(`${actionLabels[actionName] ?? '操作'}已完成`)
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '操作失败，请稍后重试')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  async function markAllNotificationsRead() {
-    setSubmitting(true)
-    try {
-      await requestManagementResource<JsonRecord>('management/notifications/action', {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'mark_all_read',
-          scope_type: 'platform',
-          scope_id: 'hm',
-          before: new Date().toISOString(),
-        }),
-      })
-      await load()
-      toast.success('当前通知已全部标记为已读')
-    } catch (nextError) {
-      toast.error(nextError instanceof Error ? nextError.message : '批量标记失败')
     } finally {
       setSubmitting(false)
     }
@@ -916,12 +833,7 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
         title={meta.title}
         description={meta.description}
         icon={Icon}
-        action={module === 'notifications' ? (
-          <Button variant="outline" disabled={submitting} onClick={() => void markAllNotificationsRead()}>
-            <ShieldCheck className="h-4 w-4" />
-            全部标记已读
-          </Button>
-        ) : module === 'plans' ? (
+        action={module === 'plans' ? (
           <Button onClick={openCreatePlan}>
             <Plus className="h-4 w-4" />
             新建套餐

@@ -14,7 +14,7 @@ pnpm dev
 ```
 
 默认访问 `http://localhost:3000/login`。服务端变量
-`MANAGEMENT_API_BASE_URL` 默认指向 `http://127.0.0.1:8790`，不要以 `NEXT_PUBLIC_`
+`MANAGEMENT_API_BASE_URL` 默认指向 `http://127.0.0.1:8790/v1`，不要以 `NEXT_PUBLIC_`
 暴露。
 
 登录使用 HogeTalk 账号手机号、国家代码和密码。账号必须具备实时
@@ -23,7 +23,9 @@ pnpm dev
 ## 已接入的真实链路
 
 - `hm_management` 独立认证域的手机号密码登录、refresh rotation 和 logout。
-- HttpOnly access/refresh Cookie、同源 BFF 白名单和写请求 CSRF 校验。
+- HttpOnly 管理会话 Cookie、同源 BFF 原样转发和写请求 CSRF 校验。浏览器的
+  `/api/<path>` 会转发为 Agent 基址下的 `/<path>`，BFF 不增删 `management`
+  或 `v1` 前缀。
 - 实时工作空间发现与幂等切换。
 - 商会 UTF-8 CSV 企业导入、任务轮询和结果汇总。
 - 商会 affiliation、certification、待补标识 candidate 查询。

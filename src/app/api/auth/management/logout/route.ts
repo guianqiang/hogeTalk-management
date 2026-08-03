@@ -9,6 +9,8 @@ import {
   validCsrf,
 } from '@/api/server/session'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   if (!validCsrf(request, request.cookies.get(CSRF_COOKIE)?.value)) {
     return bffErrorResponse(403, 'E_PERMISSION', 'CSRF 校验失败', '请刷新页面后重试。')
@@ -19,7 +21,7 @@ export async function POST(request: NextRequest) {
 
   try {
     if (accessToken && refreshToken) {
-      await callManagementBackend('/v1/auth/management/logout', {
+      await callManagementBackend('/auth/management/logout', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,

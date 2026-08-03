@@ -14,9 +14,7 @@ const platformMenuKeys = [
   'chamber_management',
   'content_management',
   'product_management',
-  'activity_operations',
   'inquiry_cooperation',
-  'notification_center',
   'account_governance',
   'billing_governance',
   'audit_export',
@@ -25,9 +23,7 @@ const platformMenuKeys = [
 const operatorMenuKeys = [
   'dashboard',
   'content_management',
-  'activity_operations',
   'inquiry_cooperation',
-  'notification_center',
   'audit_export',
 ] as const
 

@@ -154,7 +154,7 @@ const currentStaffAssignmentSchema = z.object({
   masked_phone: z.string(),
   title: z.string(),
   role_template: z.enum(['platform_admin', 'platform_operator', 'chamber_admin']),
-  status: z.enum(['active', 'revoked']),
+  status: z.enum(['active', 'inactive', 'revoked']),
   menu_keys: z.array(managementMenuKeySchema),
   must_change_password: z.boolean(),
   joined_at: z.string(),

@@ -61,7 +61,6 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
     hydrated,
     currentUser,
     availableWorkspaces,
-    workspaceData,
     logout,
     refreshWorkspace,
   } = useManagement()
@@ -133,9 +132,6 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
     )
   }
 
-  const pendingCount = workspaceData[workspace.id]?.candidates.filter((item) => (
-    item.status === 'needs_identifier' || item.status === 'conflict'
-  )).length ?? 0
   const logoutLoginHref = loginHrefForWorkspaceRole(workspace.role)
 
   async function signOut() {
@@ -269,22 +265,7 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
               <p className="mt-0.5 hidden text-[10px] text-muted-foreground sm:block">{workspace.name}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {workspace.kind === 'chamber' && (
-              <Link
-                href={`/w/${workspace.id}/enterprises`}
-                className="hidden h-8 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:flex"
-              >
-                <ClipboardCheck className="h-4 w-4" />
-                待补标识
-                {pendingCount > 0 && (
-                  <span className="grid h-5 min-w-5 place-items-center rounded-full bg-ember-600 px-1 font-data text-[10px] font-semibold text-white">
-                    {pendingCount}
-                  </span>
-                )}
-              </Link>
-            )}
-          </div>
+          <div className="flex items-center gap-2" />
         </header>
         <main className="mx-auto w-full max-w-[1360px] px-4 py-5 sm:px-7 sm:py-6">{children}</main>
       </div>

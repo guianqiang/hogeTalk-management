@@ -31,7 +31,6 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  actOnPortalHome,
   actOnHomeSectionItem,
   getHomeBanners,
   getHomeStats,
@@ -78,6 +77,7 @@ const HOME_SECTIONS = [
   { key: 'activity', title: '近期活动', noun: '活动', module: 'activities', icon: CalendarDays },
   { key: 'park', title: '东盟园区', noun: '园区内容', module: 'parks', icon: Building2 },
   { key: 'partners', title: '合作伙伴', noun: '合作伙伴', module: 'partners', icon: BookOpenText },
+  { key: 'chambers', title: '推荐商会', noun: '商会', module: 'chambers', icon: Landmark },
 ] as const
 
 type HomeSection = (typeof HOME_SECTIONS)[number]
@@ -252,7 +252,6 @@ function HomeStatsPanel() {
 
 function HomeBannersPanel() {
   const [items, setItems] = useState<HomeBannerRow[]>([])
-  const [status, setStatus] = useState<Awaited<ReturnType<typeof getHomeBanners>>['status'] | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -264,7 +263,6 @@ function HomeBannersPanel() {
     try {
       const result = await getHomeBanners()
       setItems(result.items)
-      setStatus(result.status)
     } catch (nextError) {
       setError(nextError)
     } finally {
@@ -308,20 +306,7 @@ function HomeBannersPanel() {
         link_url: item.link_url.trim(),
       })))
       await load()
-      toast.success('首页轮播草稿已保存')
-    } catch (nextError) {
-      toast.error(errorMessage(nextError))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function publish(action: 'publish' | 'withdraw') {
-    setSaving(true)
-    try {
-      await actOnPortalHome(action)
-      await load()
-      toast.success(action === 'publish' ? '首页当前修订已发布' : '首页发布已撤回')
+      toast.success('首页轮播已保存')
     } catch (nextError) {
       toast.error(errorMessage(nextError))
     } finally {
@@ -335,10 +320,10 @@ function HomeBannersPanel() {
         <div>
           <div className="mb-1 flex items-center gap-2">
             <Images className="h-4 w-4 text-ember-600" />
-            <CardTitle>首页轮播与发布</CardTitle>
+            <CardTitle>首页轮播</CardTitle>
           </div>
           <p className="text-sm text-muted-foreground">
-            草稿修订 {status?.current_revision ?? 0} · {status?.published_revision ? `已发布修订 ${status.published_revision}` : '尚未发布'}
+            保存后直接更新网站首页展示内容。
           </p>
         </div>
         <Button
@@ -398,14 +383,10 @@ function HomeBannersPanel() {
               )}
             </div>
             <div className="mt-5 flex flex-wrap justify-end gap-2 border-t pt-5">
-              {status?.published_revision && (
-                <Button variant="outline" disabled={saving} onClick={() => void publish('withdraw')}>撤回发布</Button>
-              )}
-              <Button variant="outline" disabled={saving} onClick={() => void save()}>
+              <Button disabled={saving} onClick={() => void save()}>
                 {saving && <LoaderCircle className="h-4 w-4 animate-spin" />}
-                保存草稿
+                保存轮播
               </Button>
-              <Button disabled={saving || !status} onClick={() => void publish('publish')}>发布当前修订</Button>
             </div>
           </>
         )}
@@ -490,7 +471,7 @@ function ContentPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden p-0">
+      <DialogContent className="flex h-[min(88vh,760px)] max-w-3xl flex-col overflow-hidden p-0">
         <DialogHeader className="border-b border-border px-6 pb-5 pt-6 pr-12">
           <DialogTitle>选择已有{section.noun}</DialogTitle>
           <DialogDescription>
@@ -518,7 +499,7 @@ function ContentPicker({
             <Button type="submit" variant="outline">搜索</Button>
           </form>
 
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border">
+          <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto rounded-lg border border-border">
             {loading ? (
               <LoadingState />
             ) : error ? (
@@ -534,7 +515,7 @@ function ContentPicker({
             ) : (
               <div className="divide-y divide-border/70">
                 {items.map((item) => {
-                  const alreadyAdded = currentIds.has(item.id) || item.is_home === true
+                  const alreadyAdded = currentIds.has(item.id)
                   const checked = alreadyAdded || selected.has(item.id)
                   return (
                     <label
@@ -825,7 +806,7 @@ export function HomeCurationScreen() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="stats">首页顶部 · 统计数字</SelectItem>
-            <SelectItem value="banners">首页顶部 · 轮播与发布</SelectItem>
+            <SelectItem value="banners">首页顶部 · 轮播图</SelectItem>
             {HOME_SECTIONS.map((section, index) => (
               <SelectItem key={section.key} value={section.key}>
                 {index + 1}. {section.title}
@@ -860,7 +841,7 @@ export function HomeCurationScreen() {
             onClick={() => setActive('banners')}
           >
             <Images className="h-4 w-4" />
-            <span className="font-medium">轮播与发布</span>
+            <span className="font-medium">轮播图</span>
           </button>
           <div className="border-b border-border/70 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">内容楼层</p>
