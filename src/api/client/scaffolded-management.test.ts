@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getHomeBanners,
   getHomeStats,
+  listManagementCountryOptions,
   listHomeSection,
   saveHomeStats,
 } from './scaffolded-management'
@@ -11,6 +12,19 @@ afterEach(() => {
 })
 
 describe('portal home section sources', () => {
+  it('loads selectable countries from the public enabled-country projection', async () => {
+    const backend = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      items: [{ id: '1', code: 'MY', name: '马来西亚', status: 1 }],
+      next_cursor: null,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', backend)
+
+    await expect(listManagementCountryOptions()).resolves.toEqual([
+      { code: 'MY', name: '马来西亚' },
+    ])
+    expect(backend.mock.calls[0]?.[0]).toBe('/api/public/portal/countries?limit=100')
+  })
+
   it.each([
     ['news', 'news'],
     ['trade', 'invest'],

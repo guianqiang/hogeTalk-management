@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createChamberEnterprise,
+  createCurrentChamberLevel,
   deleteChamberEnterprise,
+  deleteCurrentChamberLevel,
+  listCurrentChamberLevels,
   setChamberEnterpriseLevel,
   updateChamberEnterprise,
+  updateCurrentChamberLevel,
 } from './management'
 
 const enterprise = {
@@ -95,5 +99,33 @@ describe('current chamber enterprise management contract', () => {
       expire_at: '2027-08-03T23:59:59+08:00',
       expected_version: 2,
     })
+  })
+
+  it('uses the current chamber level resource without a chamber id in the path', async () => {
+    vi.stubGlobal('crypto', {
+      getRandomValues: (array: Uint8Array) => array.fill(7),
+    })
+    vi.stubGlobal('document', { cookie: 'hm_management_csrf=test-csrf' })
+    const level = { id: '7001', name: '理事单位', sort: 20 }
+    const backend = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'DELETE') return new Response(null, { status: 204 })
+      return new Response(JSON.stringify(init?.method === 'GET' ? { items: [level] } : level), {
+        status: init?.method === 'POST' ? 201 : 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    })
+    vi.stubGlobal('fetch', backend)
+
+    await listCurrentChamberLevels()
+    await createCurrentChamberLevel({ name: level.name, sort: level.sort })
+    await updateCurrentChamberLevel(level.id, { name: '常务理事单位', sort: 10 })
+    await deleteCurrentChamberLevel(level.id)
+
+    expect(backend.mock.calls.map(([url, init]) => [url, (init as RequestInit).method])).toEqual([
+      ['/api/management/chamber/levels', 'GET'],
+      ['/api/management/chamber/levels', 'POST'],
+      ['/api/management/chamber/levels/7001', 'PUT'],
+      ['/api/management/chamber/levels/7001', 'DELETE'],
+    ])
   })
 })

@@ -192,7 +192,7 @@ export type ManagementCountryOption = {
 }
 
 export async function listManagementCountryOptions(): Promise<ManagementCountryOption[]> {
-  const result = pageItems(await request<unknown>('management/portal/countries?limit=100'))
+  const result = pageItems(await request<unknown>('public/portal/countries?limit=100'))
   return result.items
     .filter((item) => Number(item.status) === 1 && typeof item.code === 'string')
     .map((item) => ({

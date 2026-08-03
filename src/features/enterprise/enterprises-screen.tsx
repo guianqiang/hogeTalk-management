@@ -5,13 +5,13 @@ import { useParams } from 'next/navigation'
 import {
   createChamberEnterprise,
   deleteChamberEnterprise,
-  listChamberCertificationLevels,
   listChamberEnterpriseImportRows,
+  listCurrentChamberLevels,
   setChamberEnterpriseLevel,
   updateChamberEnterprise,
+  type CurrentChamberLevelDto,
 } from '@/api/client/management'
 import type {
-  CertificationLevelDto,
   ImportRowDto,
 } from '@/api/generated/huameng'
 import {
@@ -139,7 +139,7 @@ export function EnterprisesScreen() {
   const [editingMember, setEditingMember] = useState<ChamberAffiliation | null>(null)
   const [memberForm, setMemberForm] = useState<MemberForm>(emptyMemberForm)
   const [deleteTarget, setDeleteTarget] = useState<ChamberAffiliation | null>(null)
-  const [levels, setLevels] = useState<CertificationLevelDto[]>([])
+  const [levels, setLevels] = useState<CurrentChamberLevelDto[]>([])
   const latestJob = snapshot?.importJobs[0]
 
   useEffect(() => {
@@ -274,7 +274,7 @@ export function EnterprisesScreen() {
 
   async function loadLevels() {
     try {
-      const result = await listChamberCertificationLevels(workspaceId, { enabled: true })
+      const result = await listCurrentChamberLevels()
       setLevels(result.items)
       return result.items
     } catch (error) {

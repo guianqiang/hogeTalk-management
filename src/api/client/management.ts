@@ -66,6 +66,18 @@ const accountIdentifierSchema = z.object({
   verified_at: z.string(),
 }).strict()
 
+const currentChamberLevelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  sort: z.number().int(),
+}).strict()
+
+const currentChamberLevelListSchema = z.object({
+  items: z.array(currentChamberLevelSchema),
+}).strict()
+
+export type CurrentChamberLevelDto = z.infer<typeof currentChamberLevelSchema>
+
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
@@ -270,6 +282,44 @@ export function verifyManagementPhone(challengeId: string, code: string) {
 
 export function listChamberAffiliations(chamberId: string) {
   return readAllPages(`chambers/${encodeURIComponent(chamberId)}/affiliations`, chamberAffiliationSchema)
+}
+
+export function listCurrentChamberLevels() {
+  return request('management/chamber/levels', currentChamberLevelListSchema)
+}
+
+export function createCurrentChamberLevel(body: { name: string; sort?: number }) {
+  return request('management/chamber/levels', currentChamberLevelSchema, {
+    method: 'POST',
+    idempotencyKey: newIdempotencyKey(),
+    body,
+  })
+}
+
+export function updateCurrentChamberLevel(
+  levelId: string,
+  body: { name: string; sort?: number },
+) {
+  return request(
+    `management/chamber/levels/${encodeURIComponent(levelId)}`,
+    currentChamberLevelSchema,
+    {
+      method: 'PUT',
+      idempotencyKey: newIdempotencyKey(),
+      body,
+    },
+  )
+}
+
+export function deleteCurrentChamberLevel(levelId: string) {
+  return request(
+    `management/chamber/levels/${encodeURIComponent(levelId)}`,
+    z.null(),
+    {
+      method: 'DELETE',
+      idempotencyKey: newIdempotencyKey(),
+    },
+  )
 }
 
 export function listChamberCertifications(chamberId: string) {
