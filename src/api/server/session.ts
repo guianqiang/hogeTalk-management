@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { managementAuthSessionSchema, type ManagementAuthSessionDto } from '@/api/generated/huameng'
+import { randomUuid } from '@/lib/random-id'
 
 export const ACCESS_COOKIE = 'hm_management_access'
 export const REFRESH_COOKIE = 'hm_management_refresh'
@@ -82,7 +83,7 @@ async function performManagementSessionRotation(refreshToken: string): Promise<S
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
-      'X-Request-Id': `req_${crypto.randomUUID().replaceAll('-', '')}`,
+      'X-Request-Id': `req_${randomUuid().replaceAll('-', '')}`,
     },
     body: JSON.stringify({ refresh_token: refreshToken }),
   })
@@ -130,7 +131,7 @@ export function bffErrorResponse(
   message: string,
   hint: string | null,
 ) {
-  const requestId = `req_${crypto.randomUUID().replaceAll('-', '')}`
+  const requestId = `req_${randomUuid().replaceAll('-', '')}`
   return NextResponse.json({
     request_id: requestId,
     error: {

@@ -1,4 +1,5 @@
 import { ManagementApiError } from './management'
+import { randomUuid } from '@/lib/random-id'
 
 type JsonRecord = Record<string, unknown>
 
@@ -125,7 +126,7 @@ function csrfToken() {
 }
 
 function idempotencyKey() {
-  return `idem_${crypto.randomUUID().replaceAll('-', '')}`
+  return `idem_${randomUuid().replaceAll('-', '')}`
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

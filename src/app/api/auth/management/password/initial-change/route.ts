@@ -4,6 +4,7 @@ import {
   bffErrorResponse,
   callManagementBackend,
 } from '@/api/server/session'
+import { randomUuid } from '@/lib/random-id'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        'X-Request-Id': request.headers.get('X-Request-Id') ?? `req_${crypto.randomUUID().replaceAll('-', '')}`,
+        'X-Request-Id': request.headers.get('X-Request-Id') ?? `req_${randomUuid().replaceAll('-', '')}`,
       },
       body: JSON.stringify(input.data),
     })

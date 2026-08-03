@@ -66,6 +66,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { randomUuid } from '@/lib/random-id'
 
 const HOME_SECTIONS = [
   { key: 'news', title: '新闻中心', noun: '资讯', module: 'news', icon: Newspaper },
@@ -88,7 +89,7 @@ function errorMessage(error: unknown) {
 }
 
 function clientRowId() {
-  return `local_${crypto.randomUUID()}`
+  return `local_${randomUuid()}`
 }
 
 function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => void }) {

@@ -12,6 +12,7 @@ import {
   managementLoginBackendBody,
   managementLoginRequestSchema,
 } from '@/api/server/management-login'
+import { randomUuid } from '@/lib/random-id'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        'X-Request-Id': request.headers.get('X-Request-Id') ?? `req_${crypto.randomUUID().replaceAll('-', '')}`,
+        'X-Request-Id': request.headers.get('X-Request-Id') ?? `req_${randomUuid().replaceAll('-', '')}`,
         'User-Agent': request.headers.get('User-Agent') ?? 'hogetalk-management-bff',
       },
       body: JSON.stringify(managementLoginBackendBody(input.data)),
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
       context: session.data.context,
       expires_in: session.data.expires_in,
     })
-    setSessionCookies(response, session.data, crypto.randomUUID())
+    setSessionCookies(response, session.data, randomUuid())
     return response
   } catch {
     return bffErrorResponse(

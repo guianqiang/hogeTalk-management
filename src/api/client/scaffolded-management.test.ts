@@ -96,6 +96,9 @@ describe('portal home without an existing configuration', () => {
   })
 
   it('saves statistics through the direct site-config contract', async () => {
+    vi.stubGlobal('crypto', {
+      getRandomValues: (array: Uint8Array) => array.fill(7),
+    })
     const backend = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
     vi.stubGlobal('fetch', backend)
 

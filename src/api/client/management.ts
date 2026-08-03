@@ -30,6 +30,7 @@ import {
   type VerificationLevelDto,
   type VerificationStatusDto,
 } from '@/api/generated/huameng-platform'
+import { randomUuid } from '@/lib/random-id'
 
 const loginResultSchema = z.object({
   account: z.object({
@@ -98,7 +99,7 @@ function csrfToken() {
 }
 
 function newIdempotencyKey() {
-  return crypto.randomUUID().replaceAll('-', '_')
+  return randomUuid().replaceAll('-', '_')
 }
 
 function queryString(values: Record<string, string | number | null | undefined>) {

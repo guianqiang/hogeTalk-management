@@ -8,6 +8,7 @@ import {
   clearSessionCookies,
   validCsrf,
 } from '@/api/server/session'
+import { randomUuid } from '@/lib/random-id'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'X-Request-Id': `req_${crypto.randomUUID().replaceAll('-', '')}`,
+          'X-Request-Id': `req_${randomUuid().replaceAll('-', '')}`,
         },
         body: JSON.stringify({ refresh_token: refreshToken }),
       })

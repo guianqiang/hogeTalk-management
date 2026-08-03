@@ -10,6 +10,7 @@ import {
   setSessionCookies,
   validCsrf,
 } from '@/api/server/session'
+import { randomUuid } from '@/lib/random-id'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +34,7 @@ async function proxy(request: NextRequest, context: Context) {
   const headers = new Headers({
     Accept: 'application/json',
     Authorization: `Bearer ${accessToken ?? ''}`,
-    'X-Request-Id': request.headers.get('X-Request-Id') ?? `req_${crypto.randomUUID().replaceAll('-', '')}`,
+    'X-Request-Id': request.headers.get('X-Request-Id') ?? `req_${randomUuid().replaceAll('-', '')}`,
   })
   if (body !== undefined) headers.set('Content-Type', request.headers.get('Content-Type') ?? 'application/json')
   const idempotencyKey = request.headers.get('Idempotency-Key')
@@ -67,7 +68,10 @@ async function proxy(request: NextRequest, context: Context) {
       })
     }
 
-    const response = new NextResponse(await backend.arrayBuffer(), {
+    const responseBody = [204, 205, 304].includes(backend.status)
+      ? null
+      : await backend.arrayBuffer()
+    const response = new NextResponse(responseBody, {
       status: backend.status,
       headers: {
         'Content-Type': backend.headers.get('Content-Type') ?? 'application/json',
