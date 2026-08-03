@@ -259,7 +259,10 @@ const legacyStatusLabels: Record<string, string> = {
   invalid: '无效线索',
 }
 
-function legacyStatusLabel(status: string) {
+function legacyStatusLabel(status: string, kind?: ModuleKind) {
+  if (kind === 'organization') {
+    return status === 'active' ? '正常' : '已禁用'
+  }
   return legacyStatusLabels[status] ?? '待确认'
 }
 
@@ -277,13 +280,12 @@ function isEnabledRecord(item: ScaffoldedRecord) {
 
 function recordActionLabel(config: ModuleConfig, item: ScaffoldedRecord) {
   if (config.kind === 'inquiry') return item.status === 'completed' ? '重新跟进' : '标记完成'
-  if (config.kind === 'organization' && item.status === 'suspended') return '恢复'
+  if (config.kind === 'organization') return isEnabledRecord(item) ? '禁用' : '启用'
   if (isEnabledRecord(item)) {
-    if (config.kind === 'organization') return '撤回'
     if (config.kind === 'content' || config.kind === 'catalog') return '下架'
     return '停用'
   }
-  if (config.kind === 'organization' || config.kind === 'content' || config.kind === 'catalog') return '发布'
+  if (config.kind === 'content' || config.kind === 'catalog') return '发布'
   return '启用'
 }
 
@@ -315,7 +317,7 @@ function recordColumnValue(item: ScaffoldedRecord, column: string) {
   if (column.includes('旗帜')) {
     return raw.flag || raw.flag_url ? '图片可用' : '未上传'
   }
-  if (column.includes('重点展示')) return raw.is_featured === true ? '是' : '否'
+  if (column.includes('重点展示')) return raw.is_home === true ? '是' : '否'
   if (column.includes('排序')) return String(item.sort ?? 0)
   if (column.includes('英文名称')) return item.subtitle ?? '—'
   if (column.includes('代码')) return String(item.country ?? raw.code ?? '—')
@@ -338,7 +340,6 @@ function EmptyTable({
   onLoadMore,
   onEdit,
   onStatusAction,
-  onOrganizationAction,
   onManageAdmins,
 }: {
   config: ModuleConfig
@@ -351,7 +352,6 @@ function EmptyTable({
   onLoadMore?: () => void
   onEdit: (item: ScaffoldedRecord) => void
   onStatusAction: (item: ScaffoldedRecord) => void
-  onOrganizationAction?: (item: ScaffoldedRecord, action: 'suspend' | 'close') => void
   onManageAdmins?: (item: ScaffoldedRecord) => void
 }) {
   return (
@@ -374,7 +374,7 @@ function EmptyTable({
                       {index === 0
                         ? <span className="font-medium">{item.title}</span>
                         : column.includes('状态')
-                          ? <span className="rounded-full border px-2 py-1 text-xs">{legacyStatusLabel(item.status)}</span>
+                          ? <span className="rounded-full border px-2 py-1 text-xs">{legacyStatusLabel(item.status, config.kind)}</span>
                           : column === '操作'
                             ? (
                               <div className="flex justify-end gap-1">
@@ -387,26 +387,9 @@ function EmptyTable({
                                 <Button size="sm" variant="ghost" onClick={() => onEdit(item)}>
                                   {config.kind === 'inquiry' ? '跟进' : '编辑'}
                                 </Button>
-                                {item.status !== 'closed' && (
-                                  <Button size="sm" variant="ghost" onClick={() => onStatusAction(item)}>
-                                    {recordActionLabel(config, item)}
-                                  </Button>
-                                )}
-                                {config.kind === 'organization' && item.status === 'active' && onOrganizationAction && (
-                                  <Button size="sm" variant="ghost" onClick={() => onOrganizationAction(item, 'suspend')}>
-                                    暂停
-                                  </Button>
-                                )}
-                                {config.kind === 'organization' && item.status !== 'closed' && onOrganizationAction && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-red-700 hover:text-red-700"
-                                    onClick={() => onOrganizationAction(item, 'close')}
-                                  >
-                                    关闭
-                                  </Button>
-                                )}
+                                <Button size="sm" variant="ghost" onClick={() => onStatusAction(item)}>
+                                  {recordActionLabel(config, item)}
+                                </Button>
                               </div>
                             )
                             : recordColumnValue(item, column)}
@@ -475,10 +458,8 @@ function FilterBar({
 }) {
   const statusOptions = config.kind === 'organization'
     ? [
-        { value: 'active', label: '正常运营' },
-        { value: 'draft', label: '草稿' },
-        { value: 'suspended', label: '已暂停' },
-        { value: 'closed', label: '已关闭' },
+        { value: 'active', label: '正常' },
+        { value: 'inactive', label: '已禁用' },
       ]
     : config.kind === 'dictionary'
       ? [
@@ -821,6 +802,9 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
   const [foundedOn, setFoundedOn] = useState('')
   const [registeredPlace, setRegisteredPlace] = useState('')
   const [address, setAddress] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [websiteUrl, setWebsiteUrl] = useState('')
   const [introduction, setIntroduction] = useState('')
   const [parent, setParent] = useState('none')
   const [parentOptions, setParentOptions] = useState<ScaffoldedRecord[]>([])
@@ -838,9 +822,12 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
     setEnglishName(initial?.subtitle ?? '')
     setCountryCode(initial?.country ?? '')
     setLogoUrl(String(initial?.raw?.logo ?? initial?.raw?.logo_url ?? ''))
-    setFoundedOn(String(initial?.raw?.founded_on ?? ''))
-    setRegisteredPlace(String(initial?.raw?.registered_place ?? ''))
+    setFoundedOn(String(initial?.raw?.founded_at ?? ''))
+    setRegisteredPlace(String(initial?.raw?.reg_place ?? ''))
     setAddress(String(initial?.raw?.address ?? ''))
+    setContactPhone(String(initial?.raw?.contact_phone ?? ''))
+    setContactEmail(String(initial?.raw?.contact_email ?? ''))
+    setWebsiteUrl(String(initial?.raw?.website_url ?? ''))
     setIntroduction(String(initial?.raw?.description ?? ''))
     setParent(String(initial?.raw?.parent_id ?? 'none'))
     setLink(String(
@@ -853,7 +840,7 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
     setPartnerCategory(String(initial?.raw?.category ?? 'enterprise'))
     setSort(String(initial?.sort ?? 0))
     setStatus(initial?.status ?? 'active')
-    setFeatured(initial?.raw?.is_featured === true)
+    setFeatured(initial?.raw?.is_home === true)
     if (isCategory) {
       void listScaffoldedRecords(resource, { status: 'all', limit: 100 })
         .then((result) => setParentOptions(result.items.filter((item) => item.id !== initial?.id)))
@@ -898,6 +885,9 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
         founded_on: foundedOn || null,
         registered_place: registeredPlace.trim() || null,
         address: address.trim() || null,
+        contact_phone: contactPhone.trim() || null,
+        contact_email: contactEmail.trim() || null,
+        website_url: websiteUrl.trim() || null,
         introduction: introduction.trim() || null,
         parent_id: parent === 'none' ? null : parent,
         link: link.trim() || null,
@@ -928,9 +918,7 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
           <DialogTitle>{initial ? '编辑' : '新建'}{config.noun}</DialogTitle>
           <DialogDescription>
             {isChamber
-              ? initial
-                ? '修改商会主体资料。发布、停用等状态操作请在列表中单独完成。'
-                : '按主体登记信息创建商会；创建后为草稿，可在资料确认无误后发布。'
+              ? '维护商会主体资料和使用状态，保存后立即生效。'
               : '请按页面字段填写完整资料，保存后可在列表中继续管理状态。'}
           </DialogDescription>
         </DialogHeader>
@@ -1061,6 +1049,36 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
                   placeholder="请输入详细办公地址"
                 />
               </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="chamber-phone">联系电话</Label>
+                  <Input
+                    id="chamber-phone"
+                    value={contactPhone}
+                    onChange={(event) => setContactPhone(event.target.value)}
+                    placeholder="请输入联系电话"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="chamber-email">联系邮箱</Label>
+                  <Input
+                    id="chamber-email"
+                    type="email"
+                    value={contactEmail}
+                    onChange={(event) => setContactEmail(event.target.value)}
+                    placeholder="contact@example.com"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="chamber-website">官方网站</Label>
+                <Input
+                  id="chamber-website"
+                  value={websiteUrl}
+                  onChange={(event) => setWebsiteUrl(event.target.value)}
+                  placeholder="https://example.com"
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="chamber-intro">商会简介</Label>
                 <Textarea id="chamber-intro" rows={5} value={introduction} onChange={(event) => setIntroduction(event.target.value)} />
@@ -1157,15 +1175,7 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
               <Label htmlFor="record-sort">排序</Label>
               <Input id="record-sort" type="number" value={sort} onChange={(event) => setSort(event.target.value)} />
             </div>
-            {isChamber ? (
-              <div className="flex items-center justify-between rounded-lg border px-4 py-3">
-                <div>
-                  <Label htmlFor="chamber-featured">首页重点展示</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">开启后可进入前台重点商会推荐位。</p>
-                </div>
-                <Switch id="chamber-featured" checked={featured} onCheckedChange={setFeatured} />
-              </div>
-            ) : (
+            {!isChamber && (
               <div className="space-y-2">
                 <Label>启用状态</Label>
                 <Select value={status} onValueChange={setStatus}>
@@ -1178,6 +1188,30 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
               </div>
             )}
           </div>
+          {isChamber && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex min-h-20 items-center justify-between rounded-lg border px-4 py-3">
+                <div>
+                  <Label htmlFor="chamber-featured">首页重点展示</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">开启后可进入前台重点商会推荐位。</p>
+                </div>
+                <Switch id="chamber-featured" checked={featured} onCheckedChange={setFeatured} />
+              </div>
+              <div className="flex min-h-20 items-center justify-between gap-4 rounded-lg border px-4 py-3">
+                <div>
+                  <Label>使用状态</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">禁用后不再对外展示，但仍可管理资料和管理员。</p>
+                </div>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">正常</SelectItem>
+                    <SelectItem value="inactive">禁用</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
@@ -1572,12 +1606,6 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState('all')
-  const [organizationAction, setOrganizationAction] = useState<{
-    item: ScaffoldedRecord
-    action: 'suspend' | 'close'
-  } | null>(null)
-  const [organizationReason, setOrganizationReason] = useState('')
-  const [organizationSubmitting, setOrganizationSubmitting] = useState(false)
   const [adminChamber, setAdminChamber] = useState<ScaffoldedRecord | null>(null)
   const [adminView, setAdminView] = useState<'list' | 'detail' | 'create' | 'created'>('list')
   const [adminItems, setAdminItems] = useState<StaffAssignmentDto[]>([])
@@ -1742,11 +1770,7 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
   }
 
   async function changeStatus(item: ScaffoldedRecord) {
-    const action = config.kind === 'organization' && item.status === 'suspended'
-      ? 'restore'
-      : isEnabledRecord(item)
-        ? 'disable'
-        : 'enable'
+    const action = isEnabledRecord(item) ? 'disable' : 'enable'
     try {
       const updated = await actOnScaffoldedRecord(resource, item.id, action, {
         expected_version: item.version,
@@ -1754,45 +1778,12 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
       })
       onSaved(updated)
       toast.success(
-        action === 'restore'
-          ? `${config.noun}已恢复`
-          : action === 'disable'
-          ? `${config.noun}${config.kind === 'organization' ? '已撤回' : '已停用'}`
-          : `${config.noun}${config.kind === 'dictionary' ? '已启用' : '已发布'}`,
+        action === 'disable'
+          ? `${config.noun}${config.kind === 'organization' ? '已禁用' : '已停用'}`
+          : `${config.noun}${config.kind === 'organization' || config.kind === 'dictionary' ? '已启用' : '已发布'}`,
       )
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '操作失败，请稍后重试')
-    }
-  }
-
-  async function submitOrganizationAction() {
-    if (!organizationAction || !organizationReason.trim()) {
-      toast.error('请填写本次操作原因')
-      return
-    }
-    setOrganizationSubmitting(true)
-    try {
-      const updated = await actOnScaffoldedRecord(
-        resource,
-        organizationAction.item.id,
-        organizationAction.action,
-        {
-          reason: organizationReason.trim(),
-          expected_version: organizationAction.item.version,
-          __item: organizationAction.item,
-        },
-      )
-      onSaved(updated)
-      toast.success(
-        organizationAction.action === 'suspend' ? '商会已暂停' : '商会已关闭',
-      )
-      setOrganizationAction(null)
-      setOrganizationReason('')
-    } catch (nextError) {
-      toast.error(nextError instanceof Error ? nextError.message : '操作失败，请稍后重试')
-      await load()
-    } finally {
-      setOrganizationSubmitting(false)
     }
   }
 
@@ -1850,10 +1841,6 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
             onLoadMore={() => void load(nextCursor)}
             onEdit={openEdit}
             onStatusAction={(item) => void changeStatus(item)}
-            onOrganizationAction={(item, action) => {
-              setOrganizationAction({ item, action })
-              setOrganizationReason('')
-            }}
             onManageAdmins={config.kind === 'organization' ? openAdminDialog : undefined}
           />
         </>
@@ -1878,39 +1865,6 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
           onSaved={onSaved}
         />
       )}
-
-      <Dialog open={Boolean(organizationAction)} onOpenChange={(open) => !open && setOrganizationAction(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{organizationAction?.action === 'suspend' ? '暂停商会' : '关闭商会'}</DialogTitle>
-            <DialogDescription>
-              {organizationAction?.action === 'suspend'
-                ? '暂停后商会暂时不可对外提供服务，可在核实后恢复。'
-                : '关闭是终止商会主体运营的状态操作，请确认业务已妥善处理。'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="organization-action-reason">操作原因</Label>
-            <Textarea
-              id="organization-action-reason"
-              value={organizationReason}
-              onChange={(event) => setOrganizationReason(event.target.value)}
-              placeholder="请说明暂停或关闭原因"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOrganizationAction(null)}>取消</Button>
-            <Button
-              variant={organizationAction?.action === 'close' ? 'destructive' : 'default'}
-              disabled={organizationSubmitting}
-              onClick={() => void submitOrganizationAction()}
-            >
-              {organizationSubmitting && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              确认{organizationAction?.action === 'suspend' ? '暂停' : '关闭'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={Boolean(adminChamber)} onOpenChange={(open) => {
         if (!open) {
