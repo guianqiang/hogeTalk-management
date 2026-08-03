@@ -364,6 +364,27 @@ export function setPlatformEnterpriseStatus(
   )
 }
 
+export function setPlatformEnterpriseLevel(
+  enterpriseId: string,
+  expectedVersion: number,
+  level: number,
+  expireAt: string | null,
+) {
+  return request(
+    `management/enterprises/${encodeURIComponent(enterpriseId)}/level`,
+    currentChamberEnterpriseSchema,
+    {
+      method: 'POST',
+      idempotencyKey: newIdempotencyKey(),
+      body: {
+        level,
+        expire_at: expireAt,
+        expected_version: expectedVersion,
+      },
+    },
+  )
+}
+
 export function listChamberCertificationLevels(chamberId: string, input: {
   enabled?: boolean
   cursor?: string | null

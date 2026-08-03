@@ -3,19 +3,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Building2,
+  Clock3,
   FileSearch,
   Filter,
   LoaderCircle,
+  MapPin,
   Pencil,
   Plus,
+  ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatManagementDateTime } from '@/lib/management-date-time'
 import {
   createPlatformEnterprise,
   listPlatformEnterprises,
+  setPlatformEnterpriseLevel,
   setPlatformEnterpriseStatus,
   updatePlatformEnterprise,
 } from '@/api/client/management'
+import { listManagementCountryOptions } from '@/api/client/scaffolded-management'
 import type { CurrentChamberEnterpriseDto } from '@/api/generated/huameng'
 import { PageHeading } from '@/components/management/page-heading'
 import { CountrySelect } from '@/components/management/country-select'
@@ -46,6 +52,16 @@ const enterpriseTypeLabels: Record<number, string> = {
   3: '综合企业',
 }
 
+function dateInputValue(value: string | null) {
+  if (!value) return ''
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value))
+}
+
 export function PlatformEnterprisesPreview() {
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState('all')
@@ -61,6 +77,9 @@ export function PlatformEnterprisesPreview() {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [description, setDescription] = useState('')
+  const [platformLevel, setPlatformLevel] = useState('0')
+  const [platformLevelExpireAt, setPlatformLevelExpireAt] = useState('')
+  const [countryNames, setCountryNames] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
 
   const load = useCallback(async () => {
@@ -93,7 +112,15 @@ export function PlatformEnterprisesPreview() {
     setPhone(selected?.contact_phone ?? '')
     setEmail(selected?.contact_email ?? '')
     setDescription(selected?.description ?? '')
+    setPlatformLevel(String(selected?.platform_level ?? 0))
+    setPlatformLevelExpireAt(dateInputValue(selected?.platform_level_expire_at ?? null))
   }, [formOpen, selected])
+
+  useEffect(() => {
+    void listManagementCountryOptions()
+      .then((countries) => setCountryNames(Object.fromEntries(countries.map((item) => [item.code, item.name]))))
+      .catch(() => setCountryNames({}))
+  }, [])
 
   const stats = useMemo(() => [
     ['企业主体', String(items.length), '当前查询范围内的企业主体'],
@@ -134,9 +161,24 @@ export function PlatformEnterprisesPreview() {
         contact_email: email.trim() || null,
         declared_credit_code: identifierValue.trim() || null,
       }
-      const item = selected
+      let item = selected
         ? await updatePlatformEnterprise(selected.enterprise_id, selected.version, payload)
         : await createPlatformEnterprise(payload)
+      const nextLevel = Math.max(0, Number(platformLevel) || 0)
+      const nextExpireAt = nextLevel > 0 && platformLevelExpireAt
+        ? `${platformLevelExpireAt}T23:59:59+08:00`
+        : null
+      if (
+        item.platform_level !== nextLevel
+        || dateInputValue(item.platform_level_expire_at) !== (nextLevel > 0 ? platformLevelExpireAt : '')
+      ) {
+        item = await setPlatformEnterpriseLevel(
+          item.enterprise_id,
+          item.version,
+          nextLevel,
+          nextExpireAt,
+        )
+      }
       upsertItem(item)
       setFormOpen(false)
       toast.success(selected ? '企业资料已更新' : '企业主体已创建')
@@ -214,10 +256,10 @@ export function PlatformEnterprisesPreview() {
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left">
+            <table className="w-full min-w-[1120px] text-left">
               <thead>
                 <tr className="border-b bg-muted/45 text-[11px] text-muted-foreground">
-                  {['企业主体', '类型与地区', '状态', '更新时间', '操作'].map((column) => (
+                  {['企业主体', '类型与地区', '平台认证', '状态', '更新时间', '操作'].map((column) => (
                     <th key={column} className="px-5 py-3 font-medium">{column}</th>
                   ))}
                 </tr>
@@ -226,12 +268,49 @@ export function PlatformEnterprisesPreview() {
                 {items.map((item) => (
                   <tr key={item.enterprise_id} className="text-sm">
                     <td className="px-5 py-4">
-                      <p className="font-medium">{item.name}</p>
-                      <p className="mt-1 font-data text-xs text-muted-foreground">{item.enterprise_id}</p>
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ember-50 text-sm font-semibold text-ember-700">
+                          {item.name.slice(0, 1)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{item.name}</p>
+                          <p className="mt-1 font-data text-[11px] text-muted-foreground">{item.enterprise_id}</p>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-5 py-4 text-muted-foreground">{enterpriseTypeLabels[item.enterprise_type]} · {item.country_code}</td>
-                    <td className="px-5 py-4"><span className="rounded-full border px-2 py-1 text-xs">{item.status === 'enabled' ? '正常' : '已停用'}</span></td>
-                    <td className="px-5 py-4 text-muted-foreground">{item.updated_at}</td>
+                    <td className="px-5 py-4">
+                      <p className="font-medium text-foreground">{enterpriseTypeLabels[item.enterprise_type]}</p>
+                      <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3" />
+                        {countryNames[item.country_code] ?? item.country_code}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                        <ShieldCheck className="h-3.5 w-3.5 text-ember-600" />
+                        {item.platform_level > 0 ? `${item.platform_level} 级` : '未设置'}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.platform_level > 0
+                          ? item.platform_level_expire_at
+                            ? `有效至 ${dateInputValue(item.platform_level_expire_at)}`
+                            : '长期有效'
+                          : '未设置有效期'}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className={item.status === 'enabled'
+                        ? 'inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700'
+                        : 'inline-flex rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600'}>
+                        {item.status === 'enabled' ? '正常' : '已停用'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="inline-flex items-center gap-1.5 font-data text-xs text-foreground">
+                        <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
+                        {formatManagementDateTime(item.updated_at)}
+                      </p>
+                    </td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-1">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(item)}>
@@ -277,18 +356,23 @@ export function PlatformEnterprisesPreview() {
       </Card>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selected ? '编辑企业主体' : '新建企业主体'}</DialogTitle>
             <DialogDescription>企业名称统一使用一个字段；海外企业允许不填写信用代码。</DialogDescription>
           </DialogHeader>
-          <div className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+          <div className="space-y-7">
+            <section className="space-y-4">
+              <div className="border-b pb-2">
+                <h3 className="text-sm font-semibold">主体资料</h3>
+                <p className="mt-1 text-xs text-muted-foreground">企业名称、业务类型与登记所在国家。</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="enterprise-name">企业名称</Label>
                 <Input id="enterprise-name" value={name} onChange={(event) => setName(event.target.value)} />
-              </div>
-              <div className="space-y-2">
+                </div>
+                <div className="space-y-2">
                 <Label>企业类型</Label>
                 <Select value={enterpriseType} onValueChange={setEnterpriseType}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -298,38 +382,85 @@ export function PlatformEnterprisesPreview() {
                     <SelectItem value="3">综合企业</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
+                </div>
+                <div className="space-y-2">
                 <Label htmlFor="enterprise-country">国家或地区</Label>
                 <CountrySelect value={country} onValueChange={setCountry} />
-              </div>
-            </div>
-            <div className="rounded-lg border bg-muted/20 p-4">
-              <p className="text-sm font-semibold">权威标识</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                国内企业可填写统一社会信用代码；未经验证的名称和域名不会自动合并企业。
-              </p>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
+                </div>
+                <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="enterprise-id-value">统一社会信用代码或登记编号</Label>
-                  <Input id="enterprise-id-value" value={identifierValue} onChange={(event) => setIdentifierValue(event.target.value)} />
+                  <Input
+                    id="enterprise-id-value"
+                    value={identifierValue}
+                    onChange={(event) => setIdentifierValue(event.target.value)}
+                    placeholder="中国企业填写统一社会信用代码，海外企业填写当地登记编号"
+                  />
                 </div>
               </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="enterprise-phone">企业联系电话</Label>
-                <Input id="enterprise-phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
+            </section>
+
+            <section className="space-y-4">
+              <div className="border-b pb-2">
+                <h3 className="text-sm font-semibold">联系与介绍</h3>
+                <p className="mt-1 text-xs text-muted-foreground">用于管理侧联络与企业目录介绍。</p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="enterprise-email">企业联系邮箱</Label>
-                <Input id="enterprise-email" value={email} onChange={(event) => setEmail(event.target.value)} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="enterprise-phone">企业联系电话</Label>
+                  <Input id="enterprise-phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="enterprise-email">企业联系邮箱</Label>
+                  <Input id="enterprise-email" value={email} onChange={(event) => setEmail(event.target.value)} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="enterprise-description">企业简介</Label>
+                  <Textarea id="enterprise-description" rows={4} value={description} onChange={(event) => setDescription(event.target.value)} />
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="enterprise-description">企业简介</Label>
-              <Textarea id="enterprise-description" rows={5} value={description} onChange={(event) => setDescription(event.target.value)} />
-            </div>
+            </section>
+
+            <section className="space-y-4 border-l-2 border-ember-400 pl-4">
+              <div>
+                <h3 className="inline-flex items-center gap-2 text-sm font-semibold">
+                  <ShieldCheck className="h-4 w-4 text-ember-600" />
+                  平台认证
+                </h3>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  仅设置华盟平台认证；商会等级由所属商会独立维护，互不覆盖。
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="enterprise-platform-level">平台认证等级</Label>
+                  <Input
+                    id="enterprise-platform-level"
+                    type="number"
+                    min={0}
+                    value={platformLevel}
+                    onChange={(event) => setPlatformLevel(event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">填写 0 表示不设置平台认证等级。</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="enterprise-platform-expire">平台认证有效期</Label>
+                  <Input
+                    id="enterprise-platform-expire"
+                    type="date"
+                    value={platformLevelExpireAt}
+                    disabled={Number(platformLevel) <= 0}
+                    onChange={(event) => setPlatformLevelExpireAt(event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">留空表示长期有效。</p>
+                </div>
+              </div>
+              {selected?.chamber_level_name && (
+                <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                  当前商会等级：{selected.chamber_level_name}
+                  {selected.chamber_level_expire_at ? `，有效至 ${dateInputValue(selected.chamber_level_expire_at)}` : '，长期有效'}
+                </p>
+              )}
+            </section>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFormOpen(false)}>取消</Button>
