@@ -590,10 +590,92 @@ function bytesToHex(bytes: ArrayBuffer) {
   return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+const SMALL_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
+
+async function uploadSmallManagementMedia(
+  file: File,
+  purpose: 'cms' | 'product' | 'enterprise' | 'chamber' | 'profile',
+) {
+  const query = new URLSearchParams({ purpose, filename: file.name })
+  const response = await fetch(`/api/management/management/media/uploads/content?${query}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Management-CSRF': csrfToken(),
+      'Idempotency-Key': idempotencyKey(),
+    },
+    credentials: 'same-origin',
+    cache: 'no-store',
+    body: file,
+  })
+  const body = await response.json().catch(() => null) as JsonRecord | null
+  if (!response.ok) {
+    const envelope = body?.error && typeof body.error === 'object' ? body.error as JsonRecord : null
+    throw new ManagementApiError(
+      response.status,
+      asString(envelope?.code) ?? 'E_PROVIDER_UNAVAILABLE',
+      asString(envelope?.message) ?? `上传 ${file.name} 失败`,
+      asString(envelope?.hint),
+      asString(body?.request_id),
+    )
+  }
+  return body ?? {}
+}
+
+async function uploadMultipartParts(file: File, upload: JsonRecord) {
+  const multipart = upload.multipart && typeof upload.multipart === 'object'
+    ? upload.multipart as JsonRecord
+    : null
+  const partSize = Number(multipart?.part_size ?? 0)
+  const parts = Array.isArray(multipart?.parts)
+    ? multipart.parts.filter((part): part is JsonRecord => Boolean(part) && typeof part === 'object')
+    : []
+  if (partSize < 100 * 1024 || parts.length === 0) {
+    throw new ManagementApiError(502, 'E_PROVIDER_UNAVAILABLE', '服务端未返回有效的 OSS 分片参数', null, null)
+  }
+
+  const completed: Array<{ part_number: number; etag: string }> = new Array(parts.length)
+  let nextIndex = 0
+  async function worker() {
+    while (nextIndex < parts.length) {
+      const index = nextIndex++
+      const part = parts[index]
+      const partNumber = Number(part.part_number)
+      const uploadUrl = asString(part.upload_url)
+      if (!uploadUrl || !Number.isInteger(partNumber)) {
+        throw new ManagementApiError(502, 'E_PROVIDER_UNAVAILABLE', 'OSS 分片参数不完整', null, null)
+      }
+      const offset = (partNumber - 1) * partSize
+      const response = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file.slice(offset, Math.min(offset + partSize, file.size)),
+      })
+      const etag = response.headers.get('ETag')?.replaceAll('"', '').trim()
+      if (!response.ok || !etag) {
+        throw new ManagementApiError(
+          response.status,
+          'E_PROVIDER_UNAVAILABLE',
+          `上传 ${file.name} 的第 ${partNumber} 个分片失败`,
+          !etag ? '请确认 OSS CORS 已暴露 ETag 响应头' : null,
+          null,
+        )
+      }
+      completed[index] = { part_number: partNumber, etag }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, parts.length) }, () => worker()))
+  return completed.sort((left, right) => left.part_number - right.part_number)
+}
+
 export async function uploadManagementMedia(
   file: File,
   purpose: 'cms' | 'product' | 'enterprise' | 'chamber' | 'profile' = 'cms',
 ) {
+  if (file.size <= SMALL_UPLOAD_MAX_BYTES) {
+    const uploaded = await uploadSmallManagementMedia(file, purpose)
+    return String(uploaded.media_url ?? '')
+  }
   const sha256 = bytesToHex(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()))
   const upload = await request<JsonRecord>('management/media/uploads', {
     method: 'POST',
@@ -605,25 +687,12 @@ export async function uploadManagementMedia(
       sha256,
     }),
   })
-  const uploadUrl = asString(upload.upload_url)
-  if (uploadUrl) {
-    const headers = new Headers()
-    const requiredHeaders = upload.required_headers && typeof upload.required_headers === 'object'
-      ? upload.required_headers as JsonRecord
-      : {}
-    for (const [name, value] of Object.entries(requiredHeaders)) {
-      if (typeof value === 'string') headers.set(name, value)
-    }
-    const response = await fetch(uploadUrl, { method: 'PUT', headers, body: file })
-    if (!response.ok) {
-      throw new ManagementApiError(response.status, 'E_PROVIDER_UNAVAILABLE', `上传 ${file.name} 失败`, null, null)
-    }
-  }
+  const parts = await uploadMultipartParts(file, upload)
   const completed = await request<JsonRecord>(
     `management/media/uploads/${encodeURIComponent(String(upload.id))}/complete`,
     {
       method: 'POST',
-      body: JSON.stringify({ expected_version: Number(upload.version ?? 1) }),
+      body: JSON.stringify({ expected_version: Number(upload.version ?? 1), parts }),
     },
   )
   return String(completed.media_url ?? upload.media_url ?? '')

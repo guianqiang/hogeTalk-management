@@ -220,6 +220,11 @@ const allowedRoutes = [
   },
   {
     method: 'POST',
+    pattern: /^management\/media\/uploads\/content$/,
+    backend: (path: string) => `/v1/${path}`,
+  },
+  {
+    method: 'POST',
     pattern: /^management\/media\/uploads(?:\/[A-Za-z][A-Za-z0-9_-]{1,100}\/complete)?$/,
     backend: (path: string) => `/v1/${path}`,
   },
@@ -310,7 +315,7 @@ async function proxy(request: NextRequest, context: Context) {
   }
 
   const query = request.nextUrl.search
-  const body = request.method === 'GET' ? undefined : await request.text()
+  const body = request.method === 'GET' ? undefined : await request.arrayBuffer()
   const headers = new Headers({
     Accept: 'application/json',
     Authorization: `Bearer ${accessToken ?? ''}`,
