@@ -434,14 +434,18 @@ export function PlatformEnterprisesPreview() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="enterprise-platform-level">平台认证等级</Label>
-                  <Input
-                    id="enterprise-platform-level"
-                    type="number"
-                    min={0}
-                    value={platformLevel}
-                    onChange={(event) => setPlatformLevel(event.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">填写 0 表示不设置平台认证等级。</p>
+                  <Select value={platformLevel} onValueChange={setPlatformLevel}>
+                    <SelectTrigger id="enterprise-platform-level" className="h-11">
+                      <SelectValue placeholder="请选择认证等级" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">未设置平台认证</SelectItem>
+                      <SelectItem value="1">1 级</SelectItem>
+                      <SelectItem value="2">2 级</SelectItem>
+                      <SelectItem value="3">3 级</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">平台等级与商会等级分别维护。</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="enterprise-platform-expire">平台认证有效期</Label>
