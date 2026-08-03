@@ -105,7 +105,7 @@ function MenuScopeSelector({
         <div className="space-y-3 rounded-xl border border-ember-100 bg-ember-50/25 p-3 sm:col-span-2">
           <div>
             <p className="text-sm font-semibold">网站内容子权限</p>
-            <p className="mt-1 text-xs text-muted-foreground">旅游、教育和供应链可以独立授权，不必开放全部网站内容。</p>
+            <p className="mt-1 text-xs text-muted-foreground">首页、资讯、各业务频道和站点配置均可独立授权。</p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {contentItems.map((item) => option(item, true))}
@@ -657,8 +657,8 @@ export function AccountMembersScreen() {
               </div>
               {workspace.kind === 'platform' && (roleTemplate === 'platform_operator' ? (
                 <div>
-                  <Label>可见菜单</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">与左侧菜单保持一致，选中后系统自动配置对应业务权限。</p>
+                  <Label>工作范围</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">与左侧功能保持一致，选中后系统自动配置对应业务权限。</p>
                   <MenuScopeSelector
                     items={menuItems}
                     selectedKeys={selectedMenuKeys}
@@ -710,7 +710,7 @@ export function AccountMembersScreen() {
             </div>
             {editRole === 'platform_operator' ? (
               <div>
-                <Label>可见菜单</Label>
+                <Label>工作范围</Label>
                 <MenuScopeSelector
                   items={menuItems}
                   selectedKeys={editMenuKeys}
