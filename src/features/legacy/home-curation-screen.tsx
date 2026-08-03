@@ -4,15 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
-  ArrowDown,
   ArrowLeft,
   ArrowRight,
-  ArrowUp,
   BarChart3,
   BookOpenText,
   Building2,
   CalendarDays,
   GraduationCap,
+  GripVertical,
   Handshake,
   Inbox,
   Images,
@@ -29,6 +28,23 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { toast } from 'sonner'
 import {
   actOnHomeSectionItem,
@@ -608,6 +624,69 @@ function ContentCover({ item, compact = false }: { item: ScaffoldedRecord; compa
   )
 }
 
+function SortableHomeItem({
+  item,
+  index,
+  disabled,
+  onRemove,
+}: {
+  item: ScaffoldedRecord
+  index: number
+  disabled: boolean
+  onRemove: (item: ScaffoldedRecord) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id, disabled })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        'grid gap-3 bg-card p-3 sm:grid-cols-[42px_auto_minmax(0,1fr)_auto] sm:items-center',
+        isDragging && 'relative z-10 rounded-lg border border-ember-300 bg-ember-50/80 shadow-lg',
+      )}
+    >
+      <button
+        type="button"
+        className="grid h-9 w-9 touch-none place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+        aria-label={`拖动「${item.title}」调整首页顺序，当前位置第 ${index + 1} 位`}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <ContentCover item={item} />
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-data text-[11px] text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
+          <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
+        </div>
+        <p className="mt-1 truncate text-xs text-muted-foreground">
+          {item.subtitle || item.category || '暂无补充说明'}
+        </p>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={disabled}
+        className="text-muted-foreground hover:text-red-700"
+        onClick={() => onRemove(item)}
+      >
+        <X className="h-4 w-4" />
+        移出首页
+      </Button>
+    </div>
+  )
+}
+
 function HomeSectionPanel({
   section,
   workspaceId,
@@ -622,6 +701,11 @@ function HomeSectionPanel({
   const [error, setError] = useState<unknown>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [removeCandidate, setRemoveCandidate] = useState<ScaffoldedRecord | null>(null)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -641,18 +725,21 @@ function HomeSectionPanel({
     void load()
   }, [load])
 
-  async function move(index: number, direction: -1 | 1) {
-    const targetIndex = index + direction
-    if (targetIndex < 0 || targetIndex >= items.length) return
-    const ordered = [...items]
-    const [moved] = ordered.splice(index, 1)
-    ordered.splice(targetIndex, 0, moved)
-    setBusyId(moved.id)
+  async function finishDrag(event: DragEndEvent) {
+    if (!event.over || event.active.id === event.over.id) return
+    const previous = items
+    const oldIndex = previous.findIndex((item) => item.id === event.active.id)
+    const newIndex = previous.findIndex((item) => item.id === event.over?.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const ordered = arrayMove(previous, oldIndex, newIndex)
+    setItems(ordered)
+    setBusyId(String(event.active.id))
     try {
       const result = await reorderHomeSection(section.key, ordered.map((item) => item.id))
       setItems(result.items.length > 0 ? result.items : ordered)
       toast.success('首页展示顺序已更新')
     } catch (nextError) {
+      setItems(previous)
       toast.error(errorMessage(nextError))
     } finally {
       setBusyId(null)
@@ -664,6 +751,7 @@ function HomeSectionPanel({
     try {
       await actOnHomeSectionItem(section.key, item.id, 'remove_from_home')
       await load()
+      setRemoveCandidate(null)
       toast.success(`已将「${item.title}」移出首页`)
     } catch (nextError) {
       toast.error(errorMessage(nextError))
@@ -718,54 +806,21 @@ function HomeSectionPanel({
               </Button>
             </div>
           ) : (
-            <div className="divide-y divide-border/70 rounded-lg border border-border">
-              {items.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="grid gap-3 p-3 sm:grid-cols-[38px_auto_minmax(0,1fr)_auto] sm:items-center"
-                >
-                  <div className="hidden h-9 w-9 place-items-center rounded-md bg-muted/60 text-sm font-semibold text-muted-foreground sm:grid">
-                    {index + 1}
-                  </div>
-                  <ContentCover item={item} />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
-                      {item.subtitle || item.category || '暂无补充说明'}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      disabled={index === 0 || busyId !== null}
-                      aria-label={`上移「${item.title}」`}
-                      onClick={() => void move(index, -1)}
-                    >
-                      {busyId === item.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      disabled={index === items.length - 1 || busyId !== null}
-                      aria-label={`下移「${item.title}」`}
-                      onClick={() => void move(index, 1)}
-                    >
-                      <ArrowDown className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void finishDrag(event)}>
+              <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+                <div className="divide-y divide-border/70 overflow-hidden rounded-lg border border-border">
+                  {items.map((item, index) => (
+                    <SortableHomeItem
+                      key={item.id}
+                      item={item}
+                      index={index}
                       disabled={busyId !== null}
-                      aria-label={`将「${item.title}」移出首页`}
-                      onClick={() => void remove(item)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+                      onRemove={setRemoveCandidate}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
           )}
         </CardContent>
       </Card>
@@ -777,6 +832,28 @@ function HomeSectionPanel({
         currentIds={currentIds}
         onAdded={load}
       />
+
+      <Dialog open={Boolean(removeCandidate)} onOpenChange={(open) => !open && setRemoveCandidate(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认移出首页</DialogTitle>
+            <DialogDescription>
+              将「{removeCandidate?.title}」从“{section.title}”楼层移出？源内容不会删除，之后仍可重新加入。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={busyId !== null} onClick={() => setRemoveCandidate(null)}>取消</Button>
+            <Button
+              variant="destructive"
+              disabled={!removeCandidate || busyId !== null}
+              onClick={() => removeCandidate && void remove(removeCandidate)}
+            >
+              {busyId === removeCandidate?.id && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              确认移出
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
