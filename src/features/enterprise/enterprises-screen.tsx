@@ -48,8 +48,8 @@ import {
   isTerminalImportJobStatus,
   nextImportPollDelay,
 } from './import-polling'
-import { OperationalModuleScreen } from '@/features/legacy/operational-module-screen'
 import type { ChamberAffiliation } from '@/lib/types'
+import { PlatformEnterprisesPreview } from './platform-enterprises-preview'
 
 function dateTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -164,7 +164,7 @@ export function EnterprisesScreen() {
   if (!workspace) return null
 
   if (workspace.kind === 'platform') {
-    return <OperationalModuleScreen module="accounts" />
+    return <PlatformEnterprisesPreview />
   }
 
   const progress = latestJob?.totalRows

@@ -196,6 +196,16 @@ function asNumber(value: unknown) {
   return typeof value === 'number' ? value : undefined
 }
 
+function asJsonRecord(value: unknown): JsonRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as JsonRecord
+    : {}
+}
+
+async function getPortalHome() {
+  return asJsonRecord(await request<unknown>('management/portal/home'))
+}
+
 function recordFromDto(dto: JsonRecord, route: ModuleRoute): ScaffoldedRecord {
   const id = String(
     dto.id
@@ -699,7 +709,7 @@ export async function uploadManagementMedia(
 }
 
 export async function getHomeStats() {
-  const home = await request<JsonRecord>('management/portal/home')
+  const home = await getPortalHome()
   const stats = Array.isArray(home.stats) ? home.stats : []
   return {
     items: stats.map((item, index) => {
@@ -715,7 +725,7 @@ export async function getHomeStats() {
 }
 
 export async function getHomeBanners() {
-  const home = await request<JsonRecord>('management/portal/home')
+  const home = await getPortalHome()
   const banners = Array.isArray(home.banners) ? home.banners : []
   return {
     items: banners.map((item, index) => {
@@ -739,7 +749,7 @@ export async function getHomeBanners() {
 }
 
 export async function saveHomeBanners(items: HomeBannerRow[]) {
-  const current = await request<JsonRecord>('management/portal/home')
+  const current = await getPortalHome()
   const result = await request<JsonRecord>('management/portal/home', {
     method: 'PUT',
     body: JSON.stringify({
@@ -761,7 +771,7 @@ export async function saveHomeBanners(items: HomeBannerRow[]) {
 }
 
 export async function actOnPortalHome(action: 'publish' | 'withdraw' | 'rollback', revision?: number) {
-  const current = await request<JsonRecord>('management/portal/home')
+  const current = await getPortalHome()
   return request<JsonRecord>('management/portal/home/action', {
     method: 'POST',
     body: JSON.stringify({
@@ -774,7 +784,7 @@ export async function actOnPortalHome(action: 'publish' | 'withdraw' | 'rollback
 }
 
 export async function saveHomeStats(items: Array<{ label: string; value: string }>, version = 0) {
-  const current = await request<JsonRecord>('management/portal/home')
+  const current = await getPortalHome()
   const result = await request<JsonRecord>('management/portal/home', {
     method: 'PUT',
     body: JSON.stringify({
@@ -869,7 +879,7 @@ export async function listHomeSection(
     }
   }
 
-  const home = await request<JsonRecord>('management/portal/home')
+  const home = await getPortalHome()
   const section = homeSections(home).find((item) => item.key === sectionKey)
   const references = Array.isArray(section?.items)
     ? section.items.filter((item): item is JsonRecord => Boolean(item) && typeof item === 'object')
@@ -900,7 +910,7 @@ export async function listHomeSection(
 export async function actOnHomeSectionItem(sectionKey: string, id: string, action: string) {
   const route = homeSectionRoutes[sectionKey]
   if (!route) throw new ManagementApiError(404, 'E_RESOURCE_NOT_FOUND', '首页分区不存在', null, null)
-  const home = await request<JsonRecord>('management/portal/home')
+  const home = await getPortalHome()
   const sections = homeSections(home)
   const current = sections.find((item) => item.key === sectionKey)
   const currentItems = Array.isArray(current?.items)
@@ -932,7 +942,7 @@ export async function actOnHomeSectionItem(sectionKey: string, id: string, actio
 export async function reorderHomeSection(sectionKey: string, orderedIds: string[]) {
   const route = homeSectionRoutes[sectionKey]
   if (!route) throw new ManagementApiError(404, 'E_RESOURCE_NOT_FOUND', '首页分区不存在', null, null)
-  const home = await request<JsonRecord>('management/portal/home')
+  const home = await getPortalHome()
   const sections = homeSections(home)
   const current = sections.find((item) => item.key === sectionKey)
   const nextSection = {

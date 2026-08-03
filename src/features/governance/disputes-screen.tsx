@@ -10,6 +10,7 @@ import {
 } from '@/api/client/management'
 import type { OwnershipDisputeDto } from '@/api/generated/huameng-platform'
 import { PageHeading } from '@/components/management/page-heading'
+import { PhoneConfirmationField } from '@/components/management/phone-confirmation-field'
 import { StatusBadge } from '@/components/management/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -137,7 +138,7 @@ export function DisputesScreen() {
       action === 'resolve'
       && (!reason.trim() || normalizedOwners.length === 0 || confirmationToken.trim().length < 16)
     ) {
-      toast.error('请填写解决方案、owner 账号和有效的确认凭证')
+      toast.error('请填写解决方案、owner 账号并完成手机验证码确认')
       return
     }
 
@@ -325,15 +326,13 @@ export function DisputesScreen() {
                   placeholder="acc_xxx，多位账号用逗号分隔"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="dispute-confirmation">手机号确认凭证</Label>
-                <Input
-                  id="dispute-confirmation"
-                  value={confirmationToken}
-                  onChange={(event) => setConfirmationToken(event.target.value)}
-                  placeholder="完成手机号确认后粘贴凭证"
-                />
-              </div>
+              <PhoneConfirmationField
+                idPrefix="dispute-resolve"
+                value={confirmationToken}
+                onChange={setConfirmationToken}
+                disabled={submitting}
+                description="验证码将发送到当前操作人的已验证手机号，用于确认本次权属处置。"
+              />
             </>
           )}
           <DialogFooter>

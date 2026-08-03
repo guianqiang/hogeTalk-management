@@ -23,6 +23,7 @@ import {
   type ScaffoldedRecord,
 } from '@/api/client/scaffolded-management'
 import { PageHeading } from '@/components/management/page-heading'
+import { PhoneConfirmationField } from '@/components/management/phone-confirmation-field'
 import { StatusBadge } from '@/components/management/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -52,6 +53,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { useManagement } from '@/lib/management'
+import { isEnterpriseAccountRecord } from '@/lib/account-scope'
 
 type JsonRecord = Record<string, unknown>
 type ModuleKey = 'tour' | 'education' | 'supply-chain' | 'activities' | 'accounts' | 'plans' | 'notifications'
@@ -115,9 +117,9 @@ const moduleMeta: Record<ModuleKey, {
     ],
   },
   accounts: {
-    title: '企业账号管理',
-    description: '按“一账号一企业”查看企业归属，并管理账号状态、登录会话、订阅和额度。',
-    noun: '企业账号',
+    title: '账号治理',
+    description: '查看 App 登录账号，管理账号状态、会话和订阅配额。',
+    noun: '账号',
     icon: UsersRound,
     statuses: [
       { value: 'active', label: '正常' },
@@ -408,6 +410,16 @@ function ActionPayloadFields({
                 </SelectContent>
               </Select>
             </div>
+          )
+        }
+        if (key === 'confirmation_token') {
+          return (
+            <PhoneConfirmationField
+              key={key}
+              idPrefix="management-action"
+              value={String(value ?? '')}
+              onChange={(nextValue) => onChange(key, nextValue)}
+            />
           )
         }
         const isLongText = key === 'reason' || key === 'description'
@@ -716,8 +728,20 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
     append ? setLoadingMore(true) : setLoading(true)
     if (!append) setError(null)
     try {
-      const result = await listScaffoldedRecords(resource, { keyword, status, cursor, limit: 20 })
-      setItems((current) => append ? [...current, ...result.items] : result.items)
+      const [result, chamberResult] = await Promise.all([
+        listScaffoldedRecords(resource, { keyword, status, cursor, limit: 20 }),
+        module === 'accounts'
+          ? listScaffoldedRecords('management/legacy/chambers', { limit: 100 })
+          : Promise.resolve(null),
+      ])
+      const excludedEnterpriseIds = new Set([
+        workspace?.id,
+        ...(chamberResult?.items.map((item) => item.id) ?? []),
+      ].filter((value): value is string => Boolean(value)))
+      const visibleItems = module === 'accounts'
+        ? result.items.filter((item) => isEnterpriseAccountRecord(item, excludedEnterpriseIds))
+        : result.items
+      setItems((current) => append ? [...current, ...visibleItems] : visibleItems)
       setNextCursor(result.next_cursor)
     } catch (nextError) {
       if (!append) setError(nextError)
@@ -725,7 +749,7 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
     } finally {
       append ? setLoadingMore(false) : setLoading(false)
     }
-  }, [keyword, resource, status])
+  }, [keyword, module, resource, status, workspace?.id])
 
   useEffect(() => {
     void load()
@@ -738,9 +762,23 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
       'auth_version',
       'scope_id',
       'scope_type',
+      ...(module === 'accounts'
+        ? ['display_name', 'masked_phone', 'enterprise', 'status', 'avatar_url']
+        : []),
     ].includes(key)),
-    [selected],
+    [module, selected],
   )
+  const subscriptionOverview = related?.subscription
+    && typeof related.subscription === 'object'
+    && !Array.isArray(related.subscription)
+    ? related.subscription as JsonRecord
+    : null
+  const quotaLedger = related?.quota_ledger
+    && typeof related.quota_ledger === 'object'
+    && !Array.isArray(related.quota_ledger)
+    ? related.quota_ledger as JsonRecord
+    : null
+  const quotaLedgerItems = Array.isArray(quotaLedger?.items) ? quotaLedger.items : []
 
   async function openDetails(item: ScaffoldedRecord) {
     setSelected(item)
@@ -801,7 +839,7 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
       return
     }
     if (typeof payload.confirmation_token === 'string' && payload.confirmation_token.trim().length < 14) {
-      toast.error('请填写本次操作的有效安全确认凭证')
+      toast.error('请完成本次操作的手机验证码确认')
       return
     }
     if (actionName === 'create' && (
@@ -925,7 +963,10 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
             <table className="w-full min-w-[760px] text-left">
               <thead>
                 <tr className="border-b bg-muted/45 text-[11px] text-muted-foreground">
-                  {['名称', '归属 / 类型', '状态', '更新时间', '操作'].map((column) => (
+                  {(module === 'accounts'
+                    ? ['账号', '所属组织', '状态', '最近活跃', '操作']
+                    : ['名称', '归属 / 类型', '状态', '更新时间', '操作']
+                  ).map((column) => (
                     <th key={column} className="px-5 py-3 font-medium">{column}</th>
                   ))}
                 </tr>
@@ -941,11 +982,17 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
                       {item.category ?? item.country ?? (module === 'accounts' ? '尚未加入企业' : '—')}
                     </td>
                     <td className="px-5 py-4"><StatusBadge status={item.status} /></td>
-                    <td className="px-5 py-4 text-muted-foreground">{managementDateTime(item.updated_at ?? item.created_at)}</td>
+                    <td className="px-5 py-4 text-muted-foreground">
+                      {managementDateTime(
+                        module === 'accounts'
+                          ? String(item.raw?.last_active_at ?? '')
+                          : item.updated_at ?? item.created_at,
+                      )}
+                    </td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => void openDetails(item)}>详情</Button>
-                        {actionsFor(module, item).length > 0 && (
+                        <Button size="sm" variant="ghost" onClick={() => void openDetails(item)}>查看详情</Button>
+                        {module !== 'accounts' && actionsFor(module, item).length > 0 && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button size="sm" variant="outline">
@@ -983,11 +1030,17 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
               </div>
             </div>
           ) : items.length === 0 ? (
-            <div className="grid min-h-72 place-items-center p-8 text-center">
-              <div>
-                <Icon className="mx-auto h-9 w-9 text-muted-foreground" />
-                <h2 className="mt-4 font-semibold">暂无{meta.noun}</h2>
-                <p className="mt-2 text-sm text-muted-foreground">没有符合当前筛选条件的数据。</p>
+            <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
+              <div className="max-w-md">
+                <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl border bg-muted/25 text-muted-foreground">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <h2 className="mt-4 text-base font-semibold">暂无{meta.noun}</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {productModules.has(module)
+                    ? `${meta.noun}由企业端创建并提交，平台后台负责审核、补件和推荐管理。`
+                    : '暂时没有可展示的数据，请调整筛选条件后重试。'}
+                </p>
               </div>
             </div>
           ) : null}
@@ -1007,17 +1060,71 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
         <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{selected?.title ?? `${meta.noun}详情`}</DialogTitle>
-            <DialogDescription>服务端实时详情及相关记录。</DialogDescription>
+            <DialogDescription>
+              {module === 'accounts'
+                ? `${selected?.subtitle ?? '未绑定手机号'} · ${selected?.category ?? '尚未关联组织'}`
+                : '服务端实时详情及相关记录。'}
+            </DialogDescription>
           </DialogHeader>
-          <dl className="grid gap-3 sm:grid-cols-2">
-            {details.map(([key, value]) => (
-              <div key={key} className="rounded-lg border bg-muted/15 p-3">
-                <dt className="text-xs text-muted-foreground">{detailFieldLabel(key)}</dt>
-                <dd className="mt-1.5 text-sm"><ValuePreview value={value} /></dd>
+          {module === 'accounts' && selected && (
+            <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/15 px-4 py-3">
+              <div>
+                <p className="text-xs text-muted-foreground">所属组织</p>
+                <p className="mt-1 text-sm font-medium">{selected.category ?? '尚未关联组织'}</p>
               </div>
-            ))}
-          </dl>
-          {related && (
+              <StatusBadge status={selected.status} />
+            </div>
+          )}
+          {module === 'accounts' && selected ? (
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border bg-muted/15 p-3">
+                <dt className="text-xs text-muted-foreground">登录手机号</dt>
+                <dd className="mt-1.5 text-sm">{selected.subtitle || '未绑定手机号'}</dd>
+              </div>
+              <div className="rounded-lg border bg-muted/15 p-3">
+                <dt className="text-xs text-muted-foreground">当前登录设备</dt>
+                <dd className="mt-1.5 text-sm">{String(selected.raw?.active_session_count ?? 0)}</dd>
+              </div>
+              <div className="rounded-lg border bg-muted/15 p-3">
+                <dt className="text-xs text-muted-foreground">最近活跃时间</dt>
+                <dd className="mt-1.5 text-sm">{managementDateTime(String(selected.raw?.last_active_at ?? ''))}</dd>
+              </div>
+              <div className="rounded-lg border bg-muted/15 p-3">
+                <dt className="text-xs text-muted-foreground">创建时间</dt>
+                <dd className="mt-1.5 text-sm">{managementDateTime(selected.created_at)}</dd>
+              </div>
+            </dl>
+          ) : (
+            <dl className="grid gap-3 sm:grid-cols-2">
+              {details.map(([key, value]) => (
+                <div key={key} className="rounded-lg border bg-muted/15 p-3">
+                  <dt className="text-xs text-muted-foreground">{detailFieldLabel(key)}</dt>
+                  <dd className="mt-1.5 text-sm"><ValuePreview value={value} /></dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {related && module === 'accounts' ? (
+            <div className="rounded-lg border p-4">
+              <p className="text-sm font-semibold">套餐与额度</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md bg-muted/25 p-3">
+                  <p className="text-xs text-muted-foreground">当前套餐</p>
+                  <div className="mt-2 text-sm">
+                    {subscriptionOverview?.subscription
+                      ? <ValuePreview value={subscriptionOverview.subscription} />
+                      : <span className="text-muted-foreground">未分配套餐</span>}
+                  </div>
+                </div>
+                <div className="rounded-md bg-muted/25 p-3">
+                  <p className="text-xs text-muted-foreground">额度记录</p>
+                  <p className="mt-2 text-sm">
+                    {quotaLedgerItems.length > 0 ? `最近 ${quotaLedgerItems.length} 条变动` : '暂无额度变动'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : related ? (
             <div className="rounded-lg border p-4">
               <p className="text-sm font-semibold">关联记录</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1029,9 +1136,25 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelected(null)}>关闭</Button>
+            {module === 'accounts' && selected && actionsFor(module, selected).length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button>
+                    账号操作<ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {actionsFor(module, selected).map((action) => (
+                    <DropdownMenuItem key={action} onClick={() => openAction(selected, action)}>
+                      {actionLabels[action] ?? action}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

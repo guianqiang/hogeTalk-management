@@ -2,6 +2,20 @@ import { z } from 'zod'
 
 const nullableString = z.string().nullable()
 
+export const managementMenuKeySchema = z.enum([
+  'dashboard',
+  'enterprise_auth',
+  'chamber_management',
+  'content_management',
+  'product_management',
+  'activity_operations',
+  'inquiry_cooperation',
+  'notification_center',
+  'account_governance',
+  'billing_governance',
+  'audit_export',
+])
+
 export const errorEnvelopeSchema = z.object({
   request_id: z.string(),
   error: z.object({
@@ -61,6 +75,8 @@ export const managementWorkspaceSchema = z.object({
   display_name: z.string(),
   country_code: z.string(),
   role_template: z.enum(['platform_admin', 'platform_operator', 'chamber_admin']),
+  title: z.string(),
+  menu_keys: z.array(managementMenuKeySchema),
 }).strict()
 
 export const managementEnterpriseSchema = z.object({
@@ -72,6 +88,8 @@ export const managementEnterpriseSchema = z.object({
   display_name: z.string(),
   country_code: z.string(),
   role_template: z.enum(['platform_admin', 'platform_operator', 'chamber_admin']),
+  title: z.string(),
+  menu_keys: z.array(managementMenuKeySchema),
 }).strict()
 
 const currentManagementMeSchema = z.object({
@@ -101,6 +119,8 @@ export const managementMeSchema = z.preprocess((value) => {
       display_name: workspace.display_name,
       country_code: workspace.country_code,
       role_template: workspace.role_template,
+      title: workspace.title,
+      menu_keys: workspace.menu_keys,
     },
   }
 }, currentManagementMeSchema)
@@ -219,6 +239,7 @@ export type ManagementLoginResponseDto = z.infer<typeof managementLoginResponseS
 export type ManagementWorkspaceDto = z.infer<typeof managementWorkspaceSchema>
 export type ManagementEnterpriseDto = z.infer<typeof managementEnterpriseSchema>
 export type ManagementMeDto = z.infer<typeof managementMeSchema>
+export type ManagementMenuKey = z.infer<typeof managementMenuKeySchema>
 export type ImportJobDto = z.infer<typeof importJobSchema>
 export type ChamberAffiliationDto = z.infer<typeof chamberAffiliationSchema>
 export type ChamberCertificationDto = z.infer<typeof chamberCertificationSchema>

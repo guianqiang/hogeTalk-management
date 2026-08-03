@@ -35,7 +35,6 @@ import {
 import { loginHrefForWorkspaceRole } from '@/features/auth/login-portals'
 import { useManagement } from '@/lib/management'
 import { navigationForWorkspace, type ManagementNavIcon } from '@/lib/navigation'
-import type { WorkspaceRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const navIcons = {
@@ -53,12 +52,6 @@ const navIcons = {
   settings: Settings2,
   partner: Handshake,
 } satisfies Record<ManagementNavIcon, typeof CircleGauge>
-
-const roleLabels: Record<WorkspaceRole, string> = {
-  platform_admin: '华盟管理员',
-  platform_operator: '华盟运营',
-  chamber_admin: '商会管理员',
-}
 
 export function ManagementShell({ children }: { children: React.ReactNode }) {
   const params = useParams<{ workspaceId: string }>()
@@ -115,18 +108,21 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
       })
   }, [pathname, visibleNavGroups, workspace])
   const workspaceRoot = workspace ? `/w/${workspace.id}` : ''
+  const firstNavItem = visibleNavGroups.flatMap((group) => group.items)[0]
+  const workspaceHomeHref = workspace
+    ? `${workspaceRoot}${firstNavItem?.href ?? '/account'}`
+    : ''
   const canAccessCurrentRoute = Boolean(
     workspace
     && (
-      pathname === workspaceRoot
-      || pathname === `${workspaceRoot}/account`
+      pathname === `${workspaceRoot}/account`
       || currentNavItem
     )
   )
   useEffect(() => {
     if (!hydrated || !currentUser || !workspace || canAccessCurrentRoute) return
-    router.replace(workspaceRoot)
-  }, [canAccessCurrentRoute, currentUser, hydrated, router, workspace, workspaceRoot])
+    router.replace(workspaceHomeHref)
+  }, [canAccessCurrentRoute, currentUser, hydrated, router, workspace, workspaceHomeHref])
   const pageTitle = pathname.endsWith('/account') ? '账号资料' : currentNavItem?.label ?? '华盟管理台'
 
   if (!hydrated || !currentUser || !workspace || !canAccessCurrentRoute) {
@@ -205,7 +201,7 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
               </Avatar>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{currentUser.name}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{roleLabels[workspace.role]}</p>
+                <p className="truncate text-[11px] text-muted-foreground">{workspace.staffTitle}</p>
               </div>
               <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/60" />
             </button>
@@ -221,7 +217,7 @@ export function ManagementShell({ children }: { children: React.ReactNode }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-foreground">{currentUser.name}</p>
                   <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                    {roleLabels[workspace.role]} · {workspace.shortName}
+                    {workspace.staffTitle} · {workspace.shortName}
                   </p>
                 </div>
               </div>

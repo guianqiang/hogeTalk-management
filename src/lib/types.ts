@@ -1,29 +1,17 @@
+import type { ManagementMenuKey } from '@/api/generated/huameng'
+
 export type WorkspaceKind = 'platform' | 'chamber'
 export type WorkspaceRole = 'platform_admin' | 'platform_operator' | 'chamber_admin'
-export type Capability =
-  | 'dashboard.read'
-  | 'enterprise.read'
-  | 'enterprise.create'
-  | 'enterprise.verify'
-  | 'claim.review'
-  | 'duplicate.review'
-  | 'dispute.review'
-  | 'staff.manage'
-  | 'account_membership.read'
-  | 'account_membership.invite'
-  | 'account_membership.manage'
-  | 'chamber_membership.read'
-  | 'chamber_membership.review'
-  | 'chamber_membership.manage'
-  | 'audit.read'
 
 export interface Workspace {
   id: string
+  staffAssignmentId?: string
   name: string
   shortName: string
   kind: WorkspaceKind
   role: WorkspaceRole
-  capabilities: Capability[]
+  staffTitle: string
+  menuKeys: ManagementMenuKey[]
 }
 
 export interface MockUser {

@@ -14,26 +14,15 @@ import type {
 } from '@/lib/types'
 
 export function mapWorkspace(dto: ManagementEnterpriseDto): Workspace {
-  const capabilities: Workspace['capabilities'] = dto.subject_type === 'chamber'
-    ? [
-      'dashboard.read',
-      'enterprise.read',
-      'enterprise.create',
-      'chamber_membership.read',
-      'staff.manage',
-      'audit.read',
-    ]
-    : dto.role_template === 'platform_admin'
-      ? ['dashboard.read', 'enterprise.verify', 'claim.review', 'duplicate.review', 'dispute.review', 'staff.manage', 'audit.read']
-      : ['dashboard.read', 'enterprise.verify', 'claim.review', 'duplicate.review', 'dispute.review', 'audit.read']
-
   return {
     id: dto.enterprise_id,
+    staffAssignmentId: dto.staff_assignment_id,
     name: dto.legal_name,
     shortName: dto.display_name,
     kind: dto.subject_type,
     role: dto.role_template,
-    capabilities,
+    staffTitle: dto.title,
+    menuKeys: [...dto.menu_keys],
   }
 }
 

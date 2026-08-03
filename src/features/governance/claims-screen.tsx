@@ -14,6 +14,7 @@ import type {
   EnterpriseClaimDto,
 } from '@/api/generated/huameng-platform'
 import { PageHeading } from '@/components/management/page-heading'
+import { PhoneConfirmationField } from '@/components/management/phone-confirmation-field'
 import { StatusBadge } from '@/components/management/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -157,7 +158,7 @@ export function ClaimsScreen() {
       return
     }
     if (action === 'confirm_approval' && confirmationToken.trim().length < 16) {
-      toast.error('请输入有效的确认凭证')
+      toast.error('请完成手机验证码确认')
       return
     }
 
@@ -350,15 +351,13 @@ export function ClaimsScreen() {
                 </div>
               )}
               {action === 'confirm_approval' ? (
-                <div className="space-y-2">
-                  <Label htmlFor="confirmation-token">手机号确认凭证</Label>
-                  <Input
-                    id="confirmation-token"
-                    value={confirmationToken}
-                    onChange={(event) => setConfirmationToken(event.target.value)}
-                    placeholder="完成手机号确认后粘贴凭证"
-                  />
-                </div>
+                <PhoneConfirmationField
+                  idPrefix="claim-second-review"
+                  value={confirmationToken}
+                  onChange={setConfirmationToken}
+                  disabled={submitting}
+                  description="验证码将发送到当前审核人的已验证手机号，用于确认本次二次审核。"
+                />
               ) : (
                 <div className="space-y-2">
                   <Label htmlFor="review-reason">
