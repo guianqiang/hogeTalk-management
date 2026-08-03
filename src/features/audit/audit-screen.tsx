@@ -13,6 +13,7 @@ import {
   type ManagementAuditRecord,
 } from '@/api/client/scaffolded-management'
 import { PageHeading } from '@/components/management/page-heading'
+import { DateTimeField } from '@/components/management/date-time-field'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -240,12 +241,12 @@ export function AuditScreen() {
           </Select>
           <Button variant="outline" onClick={() => void load()}>查询</Button>
           <div className="lg:col-span-3">
-            <label className="text-xs text-muted-foreground">开始时间</label>
-            <Input type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} />
+            <label htmlFor="audit-start" className="text-xs text-muted-foreground">开始时间</label>
+            <DateTimeField id="audit-start" type="datetime-local" value={start} onValueChange={setStart} />
           </div>
           <div className="lg:col-span-3">
-            <label className="text-xs text-muted-foreground">结束时间</label>
-            <Input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} />
+            <label htmlFor="audit-end" className="text-xs text-muted-foreground">结束时间</label>
+            <DateTimeField id="audit-end" type="datetime-local" value={end} onValueChange={setEnd} />
           </div>
         </CardContent>
       </Card>

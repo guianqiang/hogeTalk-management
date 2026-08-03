@@ -14,6 +14,7 @@ import type {
   VerificationStatusDto,
 } from '@/api/generated/huameng-platform'
 import { PageHeading } from '@/components/management/page-heading'
+import { DateTimeField } from '@/components/management/date-time-field'
 import { StatusBadge } from '@/components/management/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -452,11 +453,11 @@ export function VerificationsScreen() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="verification-valid-until">认证有效期</Label>
-                    <Input
+                    <DateTimeField
                       id="verification-valid-until"
                       type="datetime-local"
                       value={validUntil}
-                      onChange={(event) => setValidUntil(event.target.value)}
+                      onValueChange={setValidUntil}
                     />
                     <p className="text-xs text-muted-foreground">可不填写，由服务端按规则处理。</p>
                   </div>

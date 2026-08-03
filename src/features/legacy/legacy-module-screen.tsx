@@ -41,6 +41,7 @@ import {
 import type { StaffAssignmentDto } from '@/api/generated/huameng-platform'
 import { PageHeading } from '@/components/management/page-heading'
 import { CountrySelect } from '@/components/management/country-select'
+import { DateTimeField } from '@/components/management/date-time-field'
 import { RichTextEditor } from '@/components/management/rich-text-editor'
 import { HomeCurationScreen } from '@/features/legacy/home-curation-screen'
 import {
@@ -1023,11 +1024,11 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="chamber-founded-on">成立日期</Label>
-                  <Input
+                  <DateTimeField
                     id="chamber-founded-on"
                     type="date"
                     value={foundedOn}
-                    onChange={(event) => setFoundedOn(event.target.value)}
+                    onValueChange={setFoundedOn}
                   />
                 </div>
               </div>

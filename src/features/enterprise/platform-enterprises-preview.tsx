@@ -25,6 +25,7 @@ import { listManagementCountryOptions } from '@/api/client/scaffolded-management
 import type { CurrentChamberEnterpriseDto } from '@/api/generated/huameng'
 import { PageHeading } from '@/components/management/page-heading'
 import { CountrySelect } from '@/components/management/country-select'
+import { DateTimeField } from '@/components/management/date-time-field'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -444,12 +445,12 @@ export function PlatformEnterprisesPreview() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="enterprise-platform-expire">平台认证有效期</Label>
-                  <Input
+                  <DateTimeField
                     id="enterprise-platform-expire"
                     type="date"
                     value={platformLevelExpireAt}
                     disabled={Number(platformLevel) <= 0}
-                    onChange={(event) => setPlatformLevelExpireAt(event.target.value)}
+                    onValueChange={setPlatformLevelExpireAt}
                   />
                   <p className="text-xs text-muted-foreground">留空表示长期有效。</p>
                 </div>
