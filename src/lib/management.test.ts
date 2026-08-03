@@ -5,7 +5,9 @@ import {
   managementMeSchema,
 } from '@/api/generated/huameng'
 import {
+  cursorPageSchema,
   enterpriseClaimSchema,
+  staffAssignmentSchema,
   verificationApplicationSchema,
 } from '@/api/generated/huameng-platform'
 import { mapAffiliation, mapWorkspace } from '@/api/mappers/management'
@@ -13,6 +15,42 @@ import { managementAccountDisplayName } from './management'
 import { navigationForWorkspace } from './navigation'
 
 describe('frozen management contract projection', () => {
+  it('accepts the real personnel and chamber administrator response including grants', () => {
+    const result = cursorPageSchema(staffAssignmentSchema).parse({
+      items: [{
+        staff_assignment_id: '342583346817138701',
+        enterprise_id: '342583346817138689',
+        membership_id: '342583346817138699',
+        account_id: '342583346817138697',
+        username: 'chamber_admin',
+        display_name: '商会管理员',
+        masked_phone: '138****0000',
+        title: '秘书长',
+        role_template: 'chamber_admin',
+        status: 'active',
+        grants: [{
+          reviewer_grant_id: '342583346817138703',
+          action: 'chamber.manage',
+          scope_type: 'chamber',
+          scope_id: '342583346817138689',
+          country_code: null,
+          valid_from: '2026-08-03T02:30:00Z',
+          valid_to: null,
+        }],
+        menu_keys: ['dashboard', 'chamber_management'],
+        must_change_password: false,
+        joined_at: '2026-08-03T02:30:00Z',
+        last_active_at: null,
+        version: 1,
+      }],
+      page: { next_cursor: null, has_more: false },
+    })
+
+    expect(result.items[0]?.grants).toEqual([
+      expect.objectContaining({ action: 'chamber.manage', scope_type: 'chamber' }),
+    ])
+  })
+
   it('uses the saved management account display name instead of the role fallback', () => {
     expect(managementAccountDisplayName(
       { display_name: '华盟平台管理员123' },
