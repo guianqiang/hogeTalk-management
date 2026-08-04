@@ -44,7 +44,6 @@ export const errorEnvelopeSchema = z.object({
 
 export const managementAuthSessionSchema = z.object({
   access_token: z.string(),
-  refresh_token: z.string(),
   token_type: z.literal('Bearer'),
   expires_in: z.number().int().positive(),
   account: z.object({

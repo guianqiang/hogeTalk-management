@@ -1,66 +1,54 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { rotateManagementSession } from './session'
+import { NextResponse } from 'next/server'
+import { describe, expect, it } from 'vitest'
+import type { ManagementAuthSessionDto } from '@/api/generated/huameng'
+import {
+  ACCESS_COOKIE,
+  CSRF_COOKIE,
+  clearSessionCookies,
+  setSessionCookies,
+  validCsrf,
+} from './session'
 
-afterEach(() => {
-  vi.useRealTimers()
-  vi.unstubAllGlobals()
-})
+const session: ManagementAuthSessionDto = {
+  access_token: 'header.payload.signature',
+  token_type: 'Bearer',
+  expires_in: 28_800,
+  account: {
+    id: 'acc_test',
+    status: 'active',
+    display_name: '测试账号',
+    created_at: '2026-08-04T00:00:00Z',
+  },
+  context: {
+    type: 'management',
+    account_id: 'acc_test',
+  },
+}
 
-describe('rotateManagementSession', () => {
-  it('reuses one backend rotation for concurrent requests with the same refresh token', async () => {
-    vi.useFakeTimers()
-    const backend = vi.fn(async () => new Response(JSON.stringify({
-      access_token: 'access-next',
-      refresh_token: 'refresh-next',
-      token_type: 'Bearer',
-      expires_in: 900,
-      account: {
-        id: 'acc_test',
-        status: 'active',
-        display_name: '测试账号',
-        created_at: '2026-07-28T00:00:00Z',
-      },
-      context: {
-        type: 'management',
-        account_id: 'acc_test',
-      },
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }))
-    vi.stubGlobal('fetch', backend)
+describe('management JWT cookies', () => {
+  it('stores only the JWT access session and expires CSRF with the same TTL', () => {
+    const response = NextResponse.json({ ok: true })
+    setSessionCookies(response, session, 'csrf-value')
 
-    const [first, second] = await Promise.all([
-      rotateManagementSession('refresh-concurrent-test'),
-      rotateManagementSession('refresh-concurrent-test'),
-    ])
-
-    expect(backend).toHaveBeenCalledTimes(1)
-    expect(first.session?.access_token).toBe('access-next')
-    expect(second.session?.access_token).toBe('access-next')
-    expect(first.response).not.toBe(second.response)
-
-    vi.runAllTimers()
+    expect(response.cookies.get(ACCESS_COOKIE)?.value).toBe(session.access_token)
+    expect(response.cookies.get(CSRF_COOKIE)?.value).toBe('csrf-value')
+    expect(response.cookies.get('hm_management_refresh')?.value).toBe('')
   })
 
-  it('gives each concurrent caller a readable copy of a failed rotation response', async () => {
-    vi.useFakeTimers()
-    const backend = vi.fn(async () => Response.json({
-      error: { code: 'E_AUTH_INVALID', message: '刷新凭证已失效' },
-    }, { status: 401 }))
-    vi.stubGlobal('fetch', backend)
+  it('clears access, CSRF and any legacy refresh cookie on logout', () => {
+    const response = new NextResponse(null, { status: 204 })
+    clearSessionCookies(response)
 
-    const [first, second] = await Promise.all([
-      rotateManagementSession('refresh-failure-test'),
-      rotateManagementSession('refresh-failure-test'),
-    ])
+    expect(response.cookies.get(ACCESS_COOKIE)?.value).toBe('')
+    expect(response.cookies.get(CSRF_COOKIE)?.value).toBe('')
+    expect(response.cookies.get('hm_management_refresh')?.value).toBe('')
+  })
 
-    expect(backend).toHaveBeenCalledTimes(1)
-    expect(first.session).toBeNull()
-    expect(second.session).toBeNull()
-    await expect(first.response.json()).resolves.toMatchObject({ error: { code: 'E_AUTH_INVALID' } })
-    await expect(second.response.json()).resolves.toMatchObject({ error: { code: 'E_AUTH_INVALID' } })
-
-    vi.runAllTimers()
+  it('requires the standard CSRF header for mutating BFF requests', () => {
+    const request = new Request('http://localhost/api/management/me', {
+      headers: { 'X-Management-CSRF': 'csrf-value' },
+    })
+    expect(validCsrf(request, 'csrf-value')).toBe(true)
+    expect(validCsrf(request, 'other')).toBe(false)
   })
 })

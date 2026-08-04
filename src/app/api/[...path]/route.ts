@@ -2,12 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   ACCESS_COOKIE,
   CSRF_COOKIE,
-  REFRESH_COOKIE,
   bffErrorResponse,
   callManagementBackend,
   clearSessionCookies,
-  rotateManagementSession,
-  setSessionCookies,
   validCsrf,
 } from '@/api/server/session'
 import { randomUuid } from '@/lib/random-id'
@@ -23,9 +20,8 @@ async function proxy(request: NextRequest, context: Context) {
     return bffErrorResponse(403, 'E_PERMISSION', 'CSRF 校验失败', '请刷新页面后重试。')
   }
 
-  let accessToken = request.cookies.get(ACCESS_COOKIE)?.value
-  const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value
-  if (!accessToken && !refreshToken) {
+  const accessToken = request.cookies.get(ACCESS_COOKIE)?.value
+  if (!accessToken) {
     return bffErrorResponse(401, 'E_AUTH_INVALID', '管理会话已失效', '请重新登录。')
   }
 
@@ -33,7 +29,7 @@ async function proxy(request: NextRequest, context: Context) {
   const body = request.method === 'GET' ? undefined : await request.arrayBuffer()
   const headers = new Headers({
     Accept: 'application/json',
-    Authorization: `Bearer ${accessToken ?? ''}`,
+    Authorization: `Bearer ${accessToken}`,
     'X-Request-Id': request.headers.get('X-Request-Id') ?? `req_${randomUuid().replaceAll('-', '')}`,
   })
   if (body !== undefined) headers.set('Content-Type', request.headers.get('Content-Type') ?? 'application/json')
@@ -41,32 +37,11 @@ async function proxy(request: NextRequest, context: Context) {
   if (idempotencyKey) headers.set('Idempotency-Key', idempotencyKey)
 
   try {
-    let refreshedSession = null
-    let backend = await callManagementBackend(`/${path}${query}`, {
+    const backend = await callManagementBackend(`/${path}${query}`, {
       method: request.method,
       headers,
       body,
     })
-
-    if (backend.status === 401 && refreshToken) {
-      const rotated = await rotateManagementSession(refreshToken)
-      if (!rotated.session) {
-        const response = new NextResponse(await rotated.response.text(), {
-          status: rotated.response.status,
-          headers: { 'Content-Type': rotated.response.headers.get('Content-Type') ?? 'application/json' },
-        })
-        clearSessionCookies(response)
-        return response
-      }
-      refreshedSession = rotated.session
-      accessToken = refreshedSession.access_token
-      headers.set('Authorization', `Bearer ${accessToken}`)
-      backend = await callManagementBackend(`/${path}${query}`, {
-        method: request.method,
-        headers,
-        body,
-      })
-    }
 
     const responseBody = [204, 205, 304].includes(backend.status)
       ? null
@@ -82,7 +57,6 @@ async function proxy(request: NextRequest, context: Context) {
       const value = backend.headers.get(name)
       if (value) response.headers.set(name, value)
     }
-    if (refreshedSession) setSessionCookies(response, refreshedSession)
     if (backend.status === 401) clearSessionCookies(response)
     return response
   } catch {

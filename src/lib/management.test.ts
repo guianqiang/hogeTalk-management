@@ -209,7 +209,6 @@ describe('frozen management contract projection', () => {
   it('rejects role or capability claims in a management token response', () => {
     const result = managementAuthSessionSchema.safeParse({
       access_token: 'access',
-      refresh_token: 'refresh',
       token_type: 'Bearer',
       expires_in: 900,
       account: {

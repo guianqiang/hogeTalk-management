@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { managementAuthSessionSchema, type ManagementAuthSessionDto } from '@/api/generated/huameng'
+import type { ManagementAuthSessionDto } from '@/api/generated/huameng'
 import { randomUuid } from '@/lib/random-id'
 
 export const ACCESS_COOKIE = 'hm_management_access'
-export const REFRESH_COOKIE = 'hm_management_refresh'
 export const CSRF_COOKIE = 'hm_management_csrf'
+const LEGACY_REFRESH_COOKIE = 'hm_management_refresh'
 
 const secure = process.env.NODE_ENV === 'production'
 const sessionCookie = {
@@ -40,23 +40,20 @@ export function setSessionCookies(
     ...sessionCookie,
     maxAge: session.expires_in,
   })
-  response.cookies.set(REFRESH_COOKIE, session.refresh_token, {
-    ...sessionCookie,
-    maxAge: 60 * 60 * 24 * 30,
-  })
+  response.cookies.set(LEGACY_REFRESH_COOKIE, '', { ...sessionCookie, maxAge: 0 })
   if (csrfToken) {
     response.cookies.set(CSRF_COOKIE, csrfToken, {
       httpOnly: false,
       secure,
       sameSite: 'strict',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: session.expires_in,
     })
   }
 }
 
 export function clearSessionCookies(response: NextResponse) {
-  for (const name of [ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE]) {
+  for (const name of [ACCESS_COOKIE, LEGACY_REFRESH_COOKIE, CSRF_COOKIE]) {
     response.cookies.set(name, '', {
       ...sessionCookie,
       httpOnly: name !== CSRF_COOKIE,
@@ -68,61 +65,6 @@ export function clearSessionCookies(response: NextResponse) {
 export function validCsrf(request: Request, cookieValue: string | undefined) {
   const headerValue = request.headers.get('X-Management-CSRF')
   return Boolean(cookieValue && headerValue && cookieValue === headerValue)
-}
-
-type SessionRotationResult = {
-  response: Response
-  session: ManagementAuthSessionDto | null
-}
-
-const sessionRotationFlights = new Map<string, Promise<SessionRotationResult>>()
-
-async function performManagementSessionRotation(refreshToken: string): Promise<SessionRotationResult> {
-  const response = await callManagementBackend('/auth/management/refresh', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'X-Request-Id': `req_${randomUuid().replaceAll('-', '')}`,
-    },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  })
-  const reusableResponse = response.clone()
-  if (!response.ok) return { response: reusableResponse, session: null }
-
-  const payload: unknown = await response.json()
-  const parsed = managementAuthSessionSchema.safeParse(payload)
-  if (!parsed.success) {
-    return {
-      response: bffErrorResponse(
-        502,
-        'E_CONTRACT_MISMATCH',
-        '管理域刷新响应不符合冻结契约',
-        parsed.error.issues[0]?.message ?? null,
-      ),
-      session: null,
-    }
-  }
-  return { response: reusableResponse, session: parsed.data }
-}
-
-export function rotateManagementSession(refreshToken: string) {
-  const existing = sessionRotationFlights.get(refreshToken)
-  if (existing) {
-    return existing.then((result) => ({ ...result, response: result.response.clone() }))
-  }
-
-  const flight = performManagementSessionRotation(refreshToken)
-  sessionRotationFlights.set(refreshToken, flight)
-  const scheduleRelease = () => {
-    setTimeout(() => {
-      if (sessionRotationFlights.get(refreshToken) === flight) {
-        sessionRotationFlights.delete(refreshToken)
-      }
-    }, 10_000)
-  }
-  void flight.then(scheduleRelease, scheduleRelease)
-  return flight.then((result) => ({ ...result, response: result.response.clone() }))
 }
 
 export function bffErrorResponse(
