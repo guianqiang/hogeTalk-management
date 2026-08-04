@@ -298,8 +298,14 @@ function HomeBannersPanel() {
   async function upload(id: string, file: File) {
     setBusyId(id)
     try {
-      const mediaUrl = await uploadManagementMedia(file, 'cms')
-      update(id, 'media_url', mediaUrl)
+      const uploaded = await uploadManagementMedia(file, 'cms')
+      setItems((current) => current.map((item) => item.id === id
+        ? {
+            ...item,
+            media_url: uploaded.media_url,
+            media_access_url: uploaded.access_url,
+          }
+        : item))
       toast.success('轮播图片已上传')
     } catch (nextError) {
       toast.error(errorMessage(nextError))
@@ -348,7 +354,7 @@ function HomeBannersPanel() {
           size="sm"
           onClick={() => setItems((current) => [
             ...current,
-            { id: clientRowId(), title: '', subtitle: '', media_url: '', link_url: '' },
+            { id: clientRowId(), title: '', subtitle: '', media_url: '', media_access_url: '', link_url: '' },
           ])}
         >
           <Plus className="h-4 w-4" />
@@ -372,6 +378,15 @@ function HomeBannersPanel() {
                     <div className="space-y-1.5"><Label>副标题</Label><Input value={item.subtitle} onChange={(event) => update(item.id, 'subtitle', event.target.value)} /></div>
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label>轮播图片</Label>
+                      {(item.media_access_url || /^https?:\/\//i.test(item.media_url)) && (
+                        <div className="overflow-hidden rounded-lg border bg-muted/15">
+                          <img
+                            className="h-40 w-full object-contain"
+                            src={item.media_access_url || item.media_url}
+                            alt={`${item.title || `第 ${index + 1} 张`}轮播图`}
+                          />
+                        </div>
+                      )}
                       <div className="flex gap-2">
                         <Input value={item.media_url} readOnly placeholder="上传后生成媒体地址" />
                         <Button variant="outline" asChild disabled={busyId !== null}>

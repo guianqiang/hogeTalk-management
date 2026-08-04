@@ -4,7 +4,9 @@ import {
   getHomeStats,
   listManagementCountryOptions,
   listHomeSection,
+  listScaffoldedRecords,
   saveHomeStats,
+  uploadManagementMedia,
 } from './scaffolded-management'
 
 afterEach(() => {
@@ -130,6 +132,52 @@ describe('portal home without an existing configuration', () => {
     expect(JSON.parse(String(request.body))).toEqual({
       value: [{ label: '合作国家', value: '10+' }],
       remark: '首页统计数字',
+    })
+  })
+})
+
+describe('management media upload contract', () => {
+  it('keeps the stable media reference and the immediately displayable URL', async () => {
+    const backend = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      media_url: 'hoge-media://341478560919220224',
+      access_url: 'https://media.test/logo.png?signature=fresh',
+      access_url_expires_at: '2026-08-04T12:00:00Z',
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', backend)
+
+    const file = new File(['logo'], 'logo.png', { type: 'image/png' })
+
+    await expect(uploadManagementMedia(file, 'chamber')).resolves.toEqual({
+      media_url: 'hoge-media://341478560919220224',
+      access_url: 'https://media.test/logo.png?signature=fresh',
+    })
+  })
+
+  it('uses a refreshed chamber logo access URL for display', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      items: [{
+        id: '341478560919220224',
+        name: '中国—东盟商会',
+        country_code: 'CN',
+        logo: 'hoge-media://341478560919220225',
+        logo_access_url: 'https://media.test/logo.png?signature=refreshed',
+        sort: 0,
+        is_home: 1,
+        status: 1,
+      }],
+      total: 1,
+      page: 1,
+      size: 20,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+
+    await expect(listScaffoldedRecords('management/legacy/chambers')).resolves.toMatchObject({
+      items: [{
+        cover_url: 'https://media.test/logo.png?signature=refreshed',
+        raw: {
+          logo: 'hoge-media://341478560919220225',
+          logo_access_url: 'https://media.test/logo.png?signature=refreshed',
+        },
+      }],
     })
   })
 })

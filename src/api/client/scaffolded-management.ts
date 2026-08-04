@@ -43,7 +43,13 @@ export interface HomeBannerRow {
   title: string
   subtitle: string
   media_url: string
+  media_access_url: string
   link_url: string
+}
+
+export interface ManagementMediaUpload {
+  media_url: string
+  access_url: string
 }
 
 export interface ManagementAuditRecord {
@@ -846,7 +852,7 @@ export async function uploadManagementMedia(
 ) {
   if (file.size <= SMALL_UPLOAD_MAX_BYTES) {
     const uploaded = await uploadSmallManagementMedia(file, purpose)
-    return String(uploaded.media_url ?? '')
+    return managementMediaUpload(uploaded)
   }
   const sha256 = bytesToHex(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()))
   const upload = await request<JsonRecord>('management/media/uploads', {
@@ -867,7 +873,23 @@ export async function uploadManagementMedia(
       body: JSON.stringify({ expected_version: Number(upload.version ?? 1), parts }),
     },
   )
-  return String(completed.media_url ?? upload.media_url ?? '')
+  return managementMediaUpload({ ...upload, ...completed })
+}
+
+function managementMediaUpload(value: JsonRecord): ManagementMediaUpload {
+  const mediaUrl = asString(value.media_url) ?? ''
+  if (!mediaUrl) {
+    throw new ManagementApiError(
+      502,
+      'E_PROVIDER_UNAVAILABLE',
+      '上传服务未返回持久化媒体地址',
+      null,
+      null,
+    )
+  }
+  const accessUrl = asString(value.access_url)
+    ?? (/^https?:\/\//i.test(mediaUrl) ? mediaUrl : '')
+  return { media_url: mediaUrl, access_url: accessUrl }
 }
 
 export async function getHomeStats() {
@@ -896,6 +918,7 @@ export async function getHomeBanners() {
         title: String(row.title ?? ''),
         subtitle: String(row.subtitle ?? ''),
         media_url: String(row.media_url ?? ''),
+        media_access_url: String(row.media_access_url ?? ''),
         link_url: String(row.link_url ?? ''),
       }
     }),

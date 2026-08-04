@@ -267,6 +267,29 @@ function legacyStatusLabel(status: string, kind?: ModuleKind) {
   return legacyStatusLabels[status] ?? '待确认'
 }
 
+function displayableMediaUrl(accessUrl: unknown, stableUrl: unknown) {
+  if (typeof accessUrl === 'string' && accessUrl) return accessUrl
+  if (typeof stableUrl === 'string' && /^(?:https?:|blob:|data:)/i.test(stableUrl)) return stableUrl
+  return ''
+}
+
+function MediaThumbnail({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
+
+  if (!src) return null
+  return (
+    <span className="grid h-16 w-24 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted/20">
+      {failed
+        ? <span className="px-2 text-center text-xs text-muted-foreground">图片地址失效</span>
+        : <img className="h-full w-full object-contain" src={src} alt={alt} onError={() => setFailed(true)} />}
+    </span>
+  )
+}
+
 function staffDateTime(value: string | null | undefined) {
   if (!value) return '暂无记录'
   return new Intl.DateTimeFormat('zh-CN', {
@@ -545,6 +568,14 @@ function ContentForm({ config, open, onOpenChange, resource, initial, onSaved }:
   const [isTop, setIsTop] = useState(false)
   const [isHome, setIsHome] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const selectedImagePreviews = useMemo(
+    () => images.map((file) => URL.createObjectURL(file)),
+    [images],
+  )
+
+  useEffect(() => () => {
+    selectedImagePreviews.forEach((url) => URL.revokeObjectURL(url))
+  }, [selectedImagePreviews])
 
   useEffect(() => {
     if (!open) return
@@ -577,7 +608,8 @@ function ContentForm({ config, open, onOpenChange, resource, initial, onSaved }:
     }
     setSubmitting(true)
     try {
-      const imageUrls = await Promise.all(images.map((file) => uploadManagementMedia(file, 'cms')))
+      const uploads = await Promise.all(images.map((file) => uploadManagementMedia(file, 'cms')))
+      const imageUrls = uploads.map((upload) => upload.media_url)
       const existingCoverUrl = String(initial?.raw?.cover ?? initial?.raw?.cover_url ?? '') || null
       const existingImageUrls = Array.isArray(initial?.raw?.images)
         ? initial.raw.images
@@ -702,6 +734,15 @@ function ContentForm({ config, open, onOpenChange, resource, initial, onSaved }:
                 </div>
               </div>
             </label>
+            {(selectedImagePreviews.length > 0 || initial?.cover_url) && (
+              <div className="flex flex-wrap gap-3 rounded-lg border bg-muted/10 p-3">
+                {selectedImagePreviews.length > 0
+                  ? selectedImagePreviews.map((src, index) => (
+                      <MediaThumbnail key={src} src={src} alt={`待上传图片 ${index + 1}`} />
+                    ))
+                  : <MediaThumbnail src={initial?.cover_url ?? ''} alt="当前封面图" />}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>正文</Label>
               <RichTextEditor value={content} onChange={setContent} />
@@ -800,6 +841,8 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
   const [englishName, setEnglishName] = useState('')
   const [countryCode, setCountryCode] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState('')
+  const [linkPreviewUrl, setLinkPreviewUrl] = useState('')
   const [foundedOn, setFoundedOn] = useState('')
   const [registeredPlace, setRegisteredPlace] = useState('')
   const [address, setAddress] = useState('')
@@ -822,7 +865,12 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
     setName(initial?.title ?? '')
     setEnglishName(initial?.subtitle ?? '')
     setCountryCode(initial?.country ?? '')
-    setLogoUrl(String(initial?.raw?.logo ?? initial?.raw?.logo_url ?? ''))
+    const stableLogoUrl = String(initial?.raw?.logo ?? initial?.raw?.logo_url ?? '')
+    setLogoUrl(stableLogoUrl)
+    setLogoPreviewUrl(displayableMediaUrl(
+      initial?.raw?.logo_access_url ?? initial?.cover_url,
+      stableLogoUrl,
+    ))
     setFoundedOn(String(initial?.raw?.founded_at ?? ''))
     setRegisteredPlace(String(initial?.raw?.reg_place ?? ''))
     setAddress(String(initial?.raw?.address ?? ''))
@@ -831,12 +879,17 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
     setWebsiteUrl(String(initial?.raw?.website_url ?? ''))
     setIntroduction(String(initial?.raw?.description ?? ''))
     setParent(String(initial?.raw?.parent_id ?? 'none'))
-    setLink(String(
+    const stableLink = String(
       initial?.raw?.website_url
         ?? initial?.raw?.slug
         ?? initial?.raw?.flag
         ?? initial?.raw?.flag_url
         ?? '',
+    )
+    setLink(stableLink)
+    setLinkPreviewUrl(displayableMediaUrl(
+      initial?.raw?.flag_access_url ?? (isCountry ? initial?.cover_url : ''),
+      isCountry ? stableLink : '',
     ))
     setPartnerCategory(String(initial?.raw?.category ?? 'enterprise'))
     setSort(String(initial?.sort ?? 0))
@@ -849,7 +902,7 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
     } else {
       setParentOptions([])
     }
-  }, [initial, isCategory, open, resource])
+  }, [initial, isCategory, isCountry, open, resource])
 
   async function save() {
     if (!name.trim()) {
@@ -949,8 +1002,11 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
               </div>
               <div className="space-y-2">
                 <Label>旗帜图片</Label>
-                <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border bg-background px-3">
-                  <span className="text-sm text-muted-foreground">{link ? '图片已上传' : '尚未上传图片'}</span>
+                <div className="flex min-h-20 items-center justify-between gap-3 rounded-md border bg-background p-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <MediaThumbnail src={linkPreviewUrl} alt="国家或地区旗帜" />
+                    <span className="text-sm text-muted-foreground">{link ? '图片已上传' : '尚未上传图片'}</span>
+                  </div>
                   <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-4 text-sm font-medium hover:bg-muted">
                     {uploadingLogo
                       ? <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -966,7 +1022,9 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
                         if (!file) return
                         setUploadingLogo(true)
                         try {
-                          setLink(await uploadManagementMedia(file, 'cms'))
+                          const uploaded = await uploadManagementMedia(file, 'cms')
+                          setLink(uploaded.media_url)
+                          setLinkPreviewUrl(uploaded.access_url)
                           toast.success('旗帜图片已上传')
                         } catch (nextError) {
                           toast.error(nextError instanceof Error ? nextError.message : '图片上传失败')
@@ -991,8 +1049,11 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
               </div>
               <div className="space-y-2">
                 <Label>商会 Logo</Label>
-                <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border bg-background px-3">
-                  <span className="text-sm text-muted-foreground">{logoUrl ? 'Logo 已上传' : '尚未上传 Logo'}</span>
+                <div className="flex min-h-20 items-center justify-between gap-3 rounded-md border bg-background p-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <MediaThumbnail src={logoPreviewUrl} alt="商会 Logo" />
+                    <span className="text-sm text-muted-foreground">{logoUrl ? 'Logo 已上传' : '尚未上传 Logo'}</span>
+                  </div>
                   <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-4 text-sm font-medium hover:bg-muted">
                     {uploadingLogo
                       ? <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -1008,7 +1069,9 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
                         if (!file) return
                         setUploadingLogo(true)
                         try {
-                          setLogoUrl(await uploadManagementMedia(file, 'chamber'))
+                          const uploaded = await uploadManagementMedia(file, 'chamber')
+                          setLogoUrl(uploaded.media_url)
+                          setLogoPreviewUrl(uploaded.access_url)
                           toast.success('商会 Logo 已上传')
                         } catch (nextError) {
                           toast.error(nextError instanceof Error ? nextError.message : '图片上传失败')
@@ -1090,8 +1153,11 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
             <>
               <div className="space-y-2">
                 <Label>合作伙伴标识</Label>
-                <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border bg-background px-3">
-                  <span className="text-sm text-muted-foreground">{logoUrl ? '标识图片已上传' : '尚未上传标识图片'}</span>
+                <div className="flex min-h-20 items-center justify-between gap-3 rounded-md border bg-background p-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <MediaThumbnail src={logoPreviewUrl} alt="合作伙伴标识" />
+                    <span className="text-sm text-muted-foreground">{logoUrl ? '标识图片已上传' : '尚未上传标识图片'}</span>
+                  </div>
                   <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-4 text-sm font-medium hover:bg-muted">
                     {uploadingLogo
                       ? <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -1107,7 +1173,9 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
                         if (!file) return
                         setUploadingLogo(true)
                         try {
-                          setLogoUrl(await uploadManagementMedia(file, 'cms'))
+                          const uploaded = await uploadManagementMedia(file, 'cms')
+                          setLogoUrl(uploaded.media_url)
+                          setLogoPreviewUrl(uploaded.access_url)
                           toast.success('合作伙伴标识已上传')
                         } catch (nextError) {
                           toast.error(nextError instanceof Error ? nextError.message : '图片上传失败')
@@ -1393,6 +1461,7 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
   const [tab, setTab] = useState<SiteConfigResponse['section']>('basic')
   const [config, setConfig] = useState<SiteConfigResponse | null>(null)
   const [values, setValues] = useState<Record<string, string>>({})
+  const [siteLogoPreviewUrl, setSiteLogoPreviewUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploadingSiteLogo, setUploadingSiteLogo] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -1403,6 +1472,10 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
       const result = await getSiteConfig(section)
       setConfig(result)
       const payload = result?.payload ?? {}
+      setSiteLogoPreviewUrl(displayableMediaUrl(
+        payload.logo_access_url,
+        payload.logo_url,
+      ))
       setValues(Object.fromEntries(Object.entries(payload).map(([key, value]) => [
         key,
         Array.isArray(value) ? value.join('、') : value == null ? '' : String(value),
@@ -1411,6 +1484,7 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
       toast.error(nextError instanceof Error ? nextError.message : '站点配置加载失败')
       setConfig(null)
       setValues({})
+      setSiteLogoPreviewUrl('')
     } finally {
       setLoading(false)
     }
@@ -1475,8 +1549,9 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
   async function uploadSiteLogo(file: File) {
     setUploadingSiteLogo(true)
     try {
-      const logoUrl = await uploadManagementMedia(file, 'cms')
-      setValues((current) => ({ ...current, logo_url: logoUrl }))
+      const uploaded = await uploadManagementMedia(file, 'cms')
+      setValues((current) => ({ ...current, logo_url: uploaded.media_url }))
+      setSiteLogoPreviewUrl(uploaded.access_url)
       toast.success('站点 Logo 已上传，请保存配置')
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '站点 Logo 上传失败')
@@ -1517,10 +1592,13 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>站点 Logo</Label>
-                    <div className="flex min-h-10 items-center justify-between gap-3 rounded-md border bg-background px-3">
-                      <span className="text-sm text-muted-foreground">
-                        {values.logo_url ? 'Logo 已上传' : '尚未上传 Logo'}
-                      </span>
+                    <div className="flex min-h-20 items-center justify-between gap-3 rounded-md border bg-background p-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <MediaThumbnail src={siteLogoPreviewUrl} alt="站点 Logo" />
+                        <span className="text-sm text-muted-foreground">
+                          {values.logo_url ? 'Logo 已上传' : '尚未上传 Logo'}
+                        </span>
+                      </div>
                       <div className="flex items-center gap-2">
                         {values.logo_url ? (
                           <Button
@@ -1528,7 +1606,10 @@ function SettingsScreen({ resource: _resource }: { resource: string }) {
                             variant="ghost"
                             size="sm"
                             disabled={uploadingSiteLogo || submitting}
-                            onClick={() => setValues((current) => ({ ...current, logo_url: '' }))}
+                            onClick={() => {
+                              setValues((current) => ({ ...current, logo_url: '' }))
+                              setSiteLogoPreviewUrl('')
+                            }}
                           >
                             移除
                           </Button>
