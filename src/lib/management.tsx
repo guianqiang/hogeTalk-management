@@ -5,6 +5,7 @@ import {
   getEnterpriseAccount,
   getEnterpriseWorkspace,
   loginEnterpriseWorkspace,
+  loginEnterpriseWorkspaceWithOtp,
   type EnterpriseWorkspaceDto,
 } from '@/api/client/enterprise-workspace'
 import {
@@ -66,6 +67,11 @@ interface ManagementContextValue {
     countryCode: string,
     password: string,
   ) => Promise<ManagementPasswordChangeRequiredDto | null>
+  loginWithOtp: (
+    portal: LoginPortal,
+    challengeId: string,
+    code: string,
+  ) => Promise<void>
   logout: () => Promise<void>
   switchWorkspace: (workspaceId: string) => Promise<void>
   refreshAccount: () => Promise<void>
@@ -274,6 +280,18 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     return null
   }, [bootstrap])
 
+  const loginWithOtp = useCallback(async (
+    portal: LoginPortal,
+    challengeId: string,
+    code: string,
+  ) => {
+    if (portal !== 'enterprise') {
+      throw new Error('验证码登录当前仅支持企业工作台')
+    }
+    await loginEnterpriseWorkspaceWithOtp(challengeId, code)
+    await bootstrap('enterprise')
+  }, [bootstrap])
+
   const refreshAccount = useCallback(async () => {
     if (enterpriseSessionDomain() === 'enterprise') {
       const account = await getEnterpriseAccount()
@@ -358,6 +376,7 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     preferredWorkspaceId,
     workspaceData,
     login,
+    loginWithOtp,
     logout,
     switchWorkspace,
     refreshAccount,
@@ -370,6 +389,7 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     currentUser,
     hydrated,
     login,
+    loginWithOtp,
     logout,
     preferredWorkspaceId,
     refreshAccount,

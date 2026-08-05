@@ -82,7 +82,7 @@ export const enterpriseAccountSchema = z.object({
 
 const enterpriseAuthChallengeSchema = z.object({
   id: z.string(),
-  purpose: z.enum(['password_reset', 'bind_phone']),
+  purpose: z.enum(['login', 'password_reset', 'bind_phone']),
   masked_destination: z.string(),
   expires_at: z.string(),
   resend_after: z.number().int().positive(),
@@ -374,6 +374,29 @@ export function createEnterpriseAuthChallenge(
       country_code: 'CN',
       locale: 'zh-CN',
       risk_token: '',
+    },
+  })
+}
+
+export function createEnterpriseWorkspaceLoginChallenge(phone: string) {
+  return request('auth/challenge', enterpriseAuthChallengeSchema, {
+    method: 'POST',
+    body: {
+      purpose: 'login',
+      phone: phone.trim(),
+      country_code: 'CN',
+      locale: 'zh-CN',
+      risk_token: '',
+    },
+  })
+}
+
+export function loginEnterpriseWorkspaceWithOtp(challengeId: string, code: string) {
+  return request('auth/enterprise-workspace/otp/login', enterpriseLoginSchema, {
+    method: 'POST',
+    body: {
+      challenge_id: challengeId,
+      code,
     },
   })
 }

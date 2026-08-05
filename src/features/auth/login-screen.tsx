@@ -8,7 +8,10 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  MessageSquareText,
   KeyRound,
+  Smartphone,
+  UserRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -17,6 +20,7 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { useManagement } from '@/lib/management'
 import { completeInitialManagementPassword } from '@/api/client/management'
+import { createEnterpriseWorkspaceLoginChallenge } from '@/api/client/enterprise-workspace'
 import { customerLoginError } from './login-error'
 import type { LoginPortal } from './login-portals'
 
@@ -26,6 +30,7 @@ interface LoginScreenProps {
   title: string
   description: string
   submitLabel: string
+  allowOtp?: boolean
   className?: string
 }
 
@@ -35,6 +40,7 @@ export function LoginScreen({
   title,
   description,
   submitLabel,
+  allowOtp = false,
   className,
 }: LoginScreenProps) {
   const router = useRouter()
@@ -44,9 +50,15 @@ export function LoginScreen({
     availableWorkspaces,
     preferredWorkspaceId,
     login,
+    loginWithOtp,
   } = useManagement()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [mode, setMode] = useState<'password' | 'otp'>('password')
+  const [code, setCode] = useState('')
+  const [challengeId, setChallengeId] = useState('')
+  const [sendingCode, setSendingCode] = useState(false)
+  const [resendSeconds, setResendSeconds] = useState(0)
   const [passwordChangeToken, setPasswordChangeToken] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -56,6 +68,7 @@ export function LoginScreen({
   const identifierId = `${portal}-identifier`
   const passwordId = `${portal}-password`
   const newPasswordId = `${portal}-new-password`
+  const codeId = `${portal}-otp-code`
 
   useEffect(() => {
     if (!hydrated || !currentUser || !availableWorkspaces.length) return
@@ -63,11 +76,36 @@ export function LoginScreen({
     router.replace(`/w/${preferred?.id ?? availableWorkspaces[0].id}`)
   }, [availableWorkspaces, currentUser, hydrated, preferredWorkspaceId, router])
 
+  useEffect(() => {
+    if (!resendSeconds) return
+    const timer = setInterval(() => {
+      setResendSeconds((current) => (current > 0 ? current - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendSeconds])
+
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     setFormError(null)
     setSubmitting(true)
     try {
+      if (mode === 'otp') {
+        if (!identifier.trim()) {
+          setFormError('请输入手机号')
+          return
+        }
+        if (!challengeId) {
+          setFormError('请先获取验证码')
+          return
+        }
+        if (!code.trim()) {
+          setFormError('请输入验证码')
+          return
+        }
+        await loginWithOtp(portal, challengeId, code.trim())
+        toast.success('登录成功')
+        return
+      }
       const outcome = await login(portal, identifier, 'CN', password)
       if (outcome) {
         setPasswordChangeToken(outcome.password_change_token)
@@ -80,6 +118,35 @@ export function LoginScreen({
       setFormError(customerLoginError(error))
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function requestCode() {
+    if (!identifier.trim()) {
+      setFormError('请输入手机号')
+      return
+    }
+    setSendingCode(true)
+    setFormError(null)
+    try {
+      const challenge = await createEnterpriseWorkspaceLoginChallenge(identifier.trim())
+      setChallengeId(challenge.id)
+      setResendSeconds(challenge.resend_after)
+      toast.success('验证码已发送')
+    } catch (error) {
+      setFormError(customerLoginError(error))
+    } finally {
+      setSendingCode(false)
+    }
+  }
+
+  function switchMode(nextMode: 'password' | 'otp') {
+    if (!allowOtp) return
+    setMode(nextMode)
+    if (nextMode === 'password') {
+      setCode('')
+      setChallengeId('')
+      setResendSeconds(0)
     }
   }
 
@@ -196,9 +263,49 @@ export function LoginScreen({
           </Button>
         </form>
       ) : (
-      <form onSubmit={submit} className="space-y-5">
-        <div className="space-y-2">
-          <Label htmlFor={identifierId}>{portal === 'enterprise' ? '企业账号或手机号' : '管理账号或手机号'}</Label>
+      <form onSubmit={submit} className="space-y-6">
+        {allowOtp && (
+          <div className="inline-flex rounded-full border border-border/80 bg-card/70 p-1 text-xs font-semibold tracking-[0.1em]">
+            <button
+              type="button"
+              className={cn(
+                'rounded-full px-4 py-2 transition',
+                mode === 'password'
+                  ? 'bg-foreground text-background shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+              onClick={() => switchMode('password')}
+              aria-pressed={mode === 'password'}
+            >
+              密码登录
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'rounded-full px-4 py-2 transition',
+                mode === 'otp'
+                  ? 'bg-foreground text-background shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+              onClick={() => switchMode('otp')}
+              aria-pressed={mode === 'otp'}
+            >
+              验证码登录
+            </button>
+          </div>
+        )}
+        <div className="space-y-2 rounded-xl border border-border/75 bg-card/40 p-4 backdrop-blur-sm">
+          <div className="mb-1 flex items-center gap-2 text-xs font-semibold tracking-[0.12em] text-muted-foreground">
+            {mode === 'otp'
+              ? <Smartphone className="h-3.5 w-3.5 text-ember-700" />
+              : <UserRound className="h-3.5 w-3.5 text-ember-700" />}
+            <span>{mode === 'otp' ? '短信快捷登录' : '账号密码登录'}</span>
+          </div>
+          <Label htmlFor={identifierId}>
+            {mode === 'otp'
+              ? '手机号'
+              : (portal === 'enterprise' ? '企业账号或手机号' : '管理账号或手机号')}
+          </Label>
           <Input
             id={identifierId}
             className="h-11 font-data focus-visible:border-ember-500 focus-visible:ring-ember-500/20"
@@ -208,39 +315,83 @@ export function LoginScreen({
               if (formError) setFormError(null)
             }}
             autoComplete="username"
-            placeholder={portal === 'enterprise' ? '请输入企业账号或已验证手机号' : '请输入管理账号或已验证手机号'}
+            placeholder={mode === 'otp'
+              ? '请输入手机号'
+              : portal === 'enterprise'
+                ? '请输入企业账号或已验证手机号'
+              : '请输入管理账号或已验证手机号'}
             autoFocus
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor={passwordId}>密码</Label>
-          <div className="relative">
-            <KeyRound className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              id={passwordId}
-              type={passwordVisible ? 'text' : 'password'}
-              className="h-11 pl-9 pr-11 focus-visible:border-ember-500 focus-visible:ring-ember-500/20"
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value)
-                if (formError) setFormError(null)
-              }}
-              autoComplete="current-password"
-              minLength={8}
-              placeholder="请输入密码"
-              required
-            />
-            <button
-              type="button"
-              className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => setPasswordVisible((current) => !current)}
-              aria-label={passwordVisible ? '隐藏密码' : '显示密码'}
-            >
-              {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+        {mode === 'otp' ? (
+          <div className="space-y-2 rounded-xl border border-border/75 bg-card/40 p-4 backdrop-blur-sm">
+            <Label htmlFor={codeId}>验证码</Label>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <Input
+                id={codeId}
+                inputMode="numeric"
+                value={code}
+                onChange={(event) => {
+                  setCode(event.target.value)
+                  if (formError) setFormError(null)
+                }}
+                placeholder="请输入验证码"
+                required
+                maxLength={8}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11"
+                disabled={sendingCode || resendSeconds > 0}
+                onClick={() => {
+                  void requestCode()
+                }}
+              >
+                {sendingCode ? '发送中…' : resendSeconds > 0 ? `${resendSeconds} 秒后重发` : challengeId ? '重新发送' : '获取验证码'}
+              </Button>
+            </div>
+            {resendSeconds > 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                验证码将在 {resendSeconds} 秒后可重新发送。
+              </p>
+            ) : null}
+            <p className="text-[11px] text-muted-foreground">
+              <MessageSquareText className="mr-1 inline h-3.5 w-3.5" />
+              请输入最近接收到的 4–8 位数字验证码。
+            </p>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-2 rounded-xl border border-border/75 bg-card/40 p-4 backdrop-blur-sm">
+            <Label htmlFor={passwordId}>密码</Label>
+            <div className="relative">
+              <KeyRound className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                id={passwordId}
+                type={passwordVisible ? 'text' : 'password'}
+                className="h-11 pl-9 pr-11 focus-visible:border-ember-500 focus-visible:ring-ember-500/20"
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value)
+                  if (formError) setFormError(null)
+                }}
+                autoComplete="current-password"
+                minLength={8}
+                placeholder="请输入密码"
+                required
+              />
+              <button
+                type="button"
+                className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                onClick={() => setPasswordVisible((current) => !current)}
+                aria-label={passwordVisible ? '隐藏密码' : '显示密码'}
+              >
+                {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        )}
 
         {formError && (
           <div

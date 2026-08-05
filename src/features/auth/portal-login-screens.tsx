@@ -245,6 +245,7 @@ export function EnterpriseLoginScreen() {
                 title="登录企业工作台"
                 description="使用平台已开通的企业账号或已验证手机号登录。"
                 submitLabel="进入企业工作台"
+                allowOtp
               />
             </div>
           </div>
