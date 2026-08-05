@@ -5,7 +5,7 @@ import {
   managementMeSchema,
 } from '@/api/generated/huameng'
 import {
-  cursorPageSchema,
+  pagedListSchema,
   enterpriseClaimSchema,
   staffAssignmentSchema,
   verificationApplicationSchema,
@@ -31,8 +31,8 @@ const websiteContentMenuKeys = [
 
 describe('frozen management contract projection', () => {
   it('accepts the real personnel and chamber administrator response including grants', () => {
-    const result = cursorPageSchema(staffAssignmentSchema).parse({
-      items: [{
+    const result = pagedListSchema(staffAssignmentSchema).parse({
+      list: [{
         staff_assignment_id: '342583346817138701',
         enterprise_id: '342583346817138689',
         membership_id: '342583346817138699',
@@ -58,10 +58,12 @@ describe('frozen management contract projection', () => {
         last_active_at: null,
         version: 1,
       }],
-      page: { next_cursor: null, has_more: false },
+      total: 1,
+      page: 1,
+      size: 20,
     })
 
-    expect(result.items[0]?.grants).toEqual([
+    expect(result.list[0]?.grants).toEqual([
       expect.objectContaining({ action: 'chamber.manage', scope_type: 'chamber' }),
     ])
   })
@@ -141,12 +143,14 @@ describe('frozen management contract projection', () => {
     expect(labels).toContain('运营概览')
     expect(labels).toContain('首页管理')
     expect(labels).toContain('企业管理')
+    expect(labels).toContain('供需审核')
     expect(labels).toContain('平台认证')
     expect(labels).toContain('认领审核')
     expect(labels).toContain('后台人员')
+    expect(labels).toContain('企业账号权限')
     expect(labels).toContain('操作审计')
     expect(labels).not.toContain('业务通知')
-    expect(labels).toHaveLength(25)
+    expect(labels).toHaveLength(27)
   })
 
   it('distinguishes content and governance operators only by effective menu keys', () => {
@@ -189,6 +193,7 @@ describe('frozen management contract projection', () => {
     expect(contentWorkspace.staffTitle).toBe('内容运营')
     expect(contentLabels).toContain('首页管理')
     expect(contentLabels).toContain('近期活动')
+    expect(contentLabels).toContain('供需审核')
     expect(contentLabels).not.toContain('业务通知')
     expect(contentLabels).toContain('操作审计')
     expect(contentLabels).not.toContain('企业管理')

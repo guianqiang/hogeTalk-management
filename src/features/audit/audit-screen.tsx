@@ -112,7 +112,7 @@ export function AuditScreen() {
   const [items, setItems] = useState<ManagementAuditRecord[]>([])
   const [actionTypes, setActionTypes] = useState<string[]>([])
   const [operators, setOperators] = useState<ManagementAuditOperator[]>([])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [nextPage, setNextPage] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -143,8 +143,8 @@ export function AuditScreen() {
         listManagementAuditActionTypes(filters),
         listManagementAuditOperators(filters),
       ])
-      setItems(result.items)
-      setNextCursor(result.next_cursor)
+      setItems(result.list)
+      setNextPage(result.size < result.total ? 2 : null)
       setActionTypes(actions)
       setOperators(auditOperators)
     } catch (nextError) {
@@ -159,12 +159,12 @@ export function AuditScreen() {
   }, [load])
 
   async function loadMore() {
-    if (!filters || !nextCursor) return
+    if (!filters || !nextPage) return
     setLoadingMore(true)
     try {
-      const result = await listManagementAudit({ ...filters, cursor: nextCursor })
-      setItems((current) => [...current, ...result.items])
-      setNextCursor(result.next_cursor)
+      const result = await listManagementAudit({ ...filters, page: nextPage })
+      setItems((current) => [...current, ...result.list])
+      setNextPage(nextPage * result.size < result.total ? nextPage + 1 : null)
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '下一页读取失败')
     } finally {
@@ -294,7 +294,7 @@ export function AuditScreen() {
           ) : null}
           <div className="flex items-center justify-between border-t px-5 py-3 text-xs text-muted-foreground">
             <span>已加载 {items.length} 条</span>
-            {nextCursor && (
+            {nextPage && (
               <Button variant="outline" size="sm" disabled={loadingMore} onClick={() => void loadMore()}>
                 {loadingMore && <LoaderCircle className="h-4 w-4 animate-spin" />}
                 加载更多

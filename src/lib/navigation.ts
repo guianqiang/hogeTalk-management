@@ -1,5 +1,4 @@
-import type { ManagementMenuKey } from '@/api/generated/huameng'
-import type { Workspace } from './types'
+import type { Workspace, WorkspaceMenuKey } from './types'
 
 export type ManagementNavIcon =
   | 'dashboard'
@@ -15,13 +14,15 @@ export type ManagementNavIcon =
   | 'globe'
   | 'settings'
   | 'partner'
+  | 'supply'
+  | 'card'
 
 export interface ManagementNavItem {
   href: string
   label: string
   note: string
   icon: ManagementNavIcon
-  menuKey: ManagementMenuKey
+  menuKey: WorkspaceMenuKey
 }
 
 export interface ManagementNavGroup {
@@ -55,6 +56,7 @@ const platformNavigation: ManagementNavGroup[] = [
     items: [
       { href: '/enterprises', label: '企业管理', note: '维护企业主体及相关资料', icon: 'enterprise', menuKey: 'enterprise_auth' },
       { href: '/legacy/chambers', label: '商会管理', note: '管理商会主体', icon: 'membership', menuKey: 'chamber_management' },
+      { href: '/supply-demand-reviews', label: '供需审核', note: '审核企业提交的供需信息', icon: 'supply', menuKey: 'content_supply_chain' },
       { href: '/legacy/inquiries', label: '线索管理', note: '管理企业合作线索', icon: 'partner', menuKey: 'inquiry_cooperation' },
     ],
   },
@@ -81,6 +83,7 @@ const platformNavigation: ManagementNavGroup[] = [
     label: '系统',
     items: [
       { href: '/account-members', label: '后台人员', note: '管理后台人员和授权范围', icon: 'account', menuKey: 'account_governance' },
+      { href: '/enterprise-accounts', label: '企业账号权限', note: '配置企业工作台功能权限', icon: 'membership', menuKey: 'account_governance' },
       { href: '/legacy/plans', label: '套餐与权益', note: '管理套餐、权益与配额规则', icon: 'settings', menuKey: 'billing_governance' },
       { href: '/audit', label: '操作审计', note: '追溯管理端业务操作', icon: 'audit', menuKey: 'audit_export' },
     ],
@@ -105,8 +108,23 @@ const chamberNavigation: ManagementNavGroup[] = [
   },
 ]
 
+const enterpriseNavigation: ManagementNavGroup[] = [
+  {
+    label: '企业工作台',
+    items: [
+      { href: '', label: '企业工作台', note: '企业运营概览', icon: 'dashboard', menuKey: 'enterprise_workspace' },
+      { href: '/supply-demands', label: '供需', note: '发布供需并跟进合作咨询', icon: 'supply', menuKey: 'supply_demand' },
+      { href: '/ai-card', label: 'AI 名片', note: '维护企业人员对外名片', icon: 'card', menuKey: 'ai_card' },
+    ],
+  },
+]
+
 export function navigationForWorkspace(workspace: Workspace): ManagementNavGroup[] {
-  const groups = workspace.kind === 'platform' ? platformNavigation : chamberNavigation
+  const groups = workspace.kind === 'platform'
+    ? platformNavigation
+    : workspace.kind === 'chamber'
+      ? chamberNavigation
+      : enterpriseNavigation
 
   return groups.flatMap((group) => {
     const items = group.items.filter((item) => workspace.menuKeys.includes(item.menuKey))

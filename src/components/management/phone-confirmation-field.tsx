@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { LoaderCircle, MessageSquareText, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { createManagementAuthChallenge } from '@/api/client/management'
+import { createEnterpriseAuthChallenge } from '@/api/client/enterprise-workspace'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,6 +17,7 @@ export function PhoneConfirmationField({
   label = '手机号安全确认',
   description,
   idPrefix = 'phone-confirmation',
+  authDomain = 'management',
 }: {
   value: string
   onChange: (value: string) => void
@@ -24,6 +26,7 @@ export function PhoneConfirmationField({
   label?: string
   description?: string
   idPrefix?: string
+  authDomain?: 'management' | 'enterprise'
 }) {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
@@ -54,7 +57,9 @@ export function PhoneConfirmationField({
     }
     setSending(true)
     try {
-      const result = await createManagementAuthChallenge(normalizedPhone, purpose)
+      const result = authDomain === 'enterprise'
+        ? await createEnterpriseAuthChallenge(normalizedPhone, purpose)
+        : await createManagementAuthChallenge(normalizedPhone, purpose)
       setChallengeId(result.id)
       setMaskedDestination(result.masked_destination)
       setCode('')

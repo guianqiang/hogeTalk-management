@@ -668,7 +668,7 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
   const [error, setError] = useState<unknown>(null)
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState('all')
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [nextPage, setNextPage] = useState<number | null>(null)
   const [selected, setSelected] = useState<ScaffoldedRecord | null>(null)
   const [related, setRelated] = useState<JsonRecord | null>(null)
   const [actionName, setActionName] = useState<string | null>(null)
@@ -682,26 +682,26 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
     }
   }, [actionPayload])
 
-  const load = useCallback(async (cursor?: string | null) => {
-    const append = Boolean(cursor)
+  const load = useCallback(async (page = 1) => {
+    const append = page > 1
     append ? setLoadingMore(true) : setLoading(true)
     if (!append) setError(null)
     try {
       const [result, chamberResult] = await Promise.all([
-        listScaffoldedRecords(resource, { keyword, status, cursor, limit: 20 }),
+        listScaffoldedRecords(resource, { keyword, status, page, size: 20 }),
         module === 'accounts'
-          ? listScaffoldedRecords('management/legacy/chambers', { limit: 100 })
+          ? listScaffoldedRecords('management/legacy/chambers', { page: 1, size: 100 })
           : Promise.resolve(null),
       ])
       const excludedEnterpriseIds = new Set([
         workspace?.id,
-        ...(chamberResult?.items.map((item) => item.id) ?? []),
+        ...(chamberResult?.list.map((item) => item.id) ?? []),
       ].filter((value): value is string => Boolean(value)))
       const visibleItems = module === 'accounts'
-        ? result.items.filter((item) => isEnterpriseAccountRecord(item, excludedEnterpriseIds))
-        : result.items
+        ? result.list.filter((item) => isEnterpriseAccountRecord(item, excludedEnterpriseIds))
+        : result.list
       setItems((current) => append ? [...current, ...visibleItems] : visibleItems)
-      setNextCursor(result.next_cursor)
+      setNextPage(page * result.size < result.total ? page + 1 : null)
     } catch (nextError) {
       if (!append) setError(nextError)
       else toast.error(nextError instanceof Error ? nextError.message : '加载下一页失败')
@@ -749,7 +749,7 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
             `management/accounts/${encodeURIComponent(item.id)}/subscription`,
           ),
           requestManagementResource<JsonRecord>(
-            `management/accounts/${encodeURIComponent(item.id)}/quota-ledger?limit=20`,
+            `management/accounts/${encodeURIComponent(item.id)}/quota-ledger?page=1&size=20`,
           ),
         ])
         setRelated({ subscription, quota_ledger: quota })
@@ -958,8 +958,8 @@ export function OperationalModuleScreen({ module }: { module: ModuleKey }) {
           ) : null}
           <div className="flex items-center justify-between border-t px-5 py-3 text-xs text-muted-foreground">
             <span>已加载 {items.length} 条 · 当前管理范围 {workspace?.shortName ?? '当前组织'}</span>
-            {nextCursor && (
-              <Button size="sm" variant="ghost" disabled={loadingMore} onClick={() => void load(nextCursor)}>
+            {nextPage && (
+              <Button size="sm" variant="ghost" disabled={loadingMore} onClick={() => void load(nextPage)}>
                 {loadingMore && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
                 加载更多
               </Button>

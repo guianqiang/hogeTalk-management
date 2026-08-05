@@ -18,7 +18,7 @@ import {
 } from '@/api/generated/huameng'
 import {
   claimReviewResultSchema,
-  cursorPageSchema,
+  pagedListSchema,
   duplicateCaseSchema,
   enterpriseClaimSchema,
   ownershipDisputeSchema,
@@ -123,7 +123,7 @@ function queryString(values: Record<string, string | number | null | undefined>)
   return encoded ? `?${encoded}` : ''
 }
 
-async function request<S extends z.ZodTypeAny>(
+export async function request<S extends z.ZodTypeAny>(
   path: string,
   schema: S,
   options: RequestOptions = {},
@@ -184,15 +184,11 @@ async function readAllPages<S extends z.ZodTypeAny>(
   itemSchema: S,
 ): Promise<Array<z.output<S>>> {
   const items: Array<z.output<S>> = []
-  let cursor: string | null = null
-
-  for (let page = 0; page < 20; page += 1) {
-    const query = new URLSearchParams({ limit: '100', sort: 'created_at' })
-    if (cursor) query.set('cursor', cursor)
+  for (let page = 1; page <= 20; page += 1) {
+    const query = new URLSearchParams({ page: String(page), size: '100', sort: 'created_at' })
     const result = await request(`${path}?${query.toString()}`, pageSchema(itemSchema))
-    items.push(...result.items)
-    if (!result.has_more || !result.next_cursor) break
-    cursor = result.next_cursor
+    items.push(...result.list)
+    if (items.length >= result.total) break
   }
 
   return items
@@ -331,16 +327,14 @@ export function listChamberImportCandidates(chamberId: string) {
 }
 
 export async function listCurrentChamberEnterprises() {
-  const items: z.output<typeof currentChamberEnterprisePageSchema>['items'] = []
-  let cursor: string | null = null
-  for (let page = 0; page < 20; page += 1) {
+  const items: z.output<typeof currentChamberEnterprisePageSchema>['list'] = []
+  for (let page = 1; page <= 20; page += 1) {
     const result: z.output<typeof currentChamberEnterprisePageSchema> = await request(
-      `management/chamber/enterprises${queryString({ cursor, limit: 100 })}`,
+      `management/chamber/enterprises${queryString({ page, size: 100 })}`,
       currentChamberEnterprisePageSchema,
     )
-    items.push(...result.items)
-    if (!result.page.has_more || !result.page.next_cursor) break
-    cursor = result.page.next_cursor
+    items.push(...result.list)
+    if (items.length >= result.total) break
   }
   return items
 }
@@ -348,15 +342,15 @@ export async function listCurrentChamberEnterprises() {
 export function listPlatformEnterprises(input: {
   keyword?: string
   status?: 'enabled' | 'disabled'
-  cursor?: string | null
-  limit?: number
+  page?: number
+  size?: number
 } = {}) {
   return request(
     `management/enterprises${queryString({
       keyword: input.keyword?.trim(),
       status: input.status,
-      cursor: input.cursor,
-      limit: input.limit ?? 20,
+      page: input.page ?? 1,
+      size: input.size ?? 20,
     })}`,
     currentChamberEnterprisePageSchema,
   )
@@ -501,14 +495,14 @@ export function setPlatformEnterpriseLevel(
 
 export function listChamberCertificationLevels(chamberId: string, input: {
   enabled?: boolean
-  cursor?: string | null
-  limit?: number
+  page?: number
+  size?: number
 } = {}) {
   return request(
     `chambers/${encodeURIComponent(chamberId)}/certification-levels${queryString({
       enabled: input.enabled === undefined ? undefined : String(input.enabled),
-      cursor: input.cursor,
-      limit: input.limit ?? 100,
+      page: input.page ?? 1,
+      size: input.size ?? 100,
       sort: 'sort_order_name',
     })}`,
     pageSchema(certificationLevelSchema),
@@ -564,15 +558,15 @@ export function listChamberEnterpriseImportRows(
   jobId: string,
   input: {
     status?: 'pending' | 'processing' | 'succeeded' | 'candidate' | 'failed' | 'all'
-    cursor?: string | null
-    limit?: number
+    page?: number
+    size?: number
   } = {},
 ) {
   return request(
     `chambers/${encodeURIComponent(chamberId)}/enterprise-imports/${encodeURIComponent(jobId)}/rows${queryString({
       status: input.status === 'all' ? undefined : input.status,
-      cursor: input.cursor,
-      limit: input.limit ?? 100,
+      page: input.page ?? 1,
+      size: input.size ?? 100,
       sort: 'row_number',
     })}`,
     pageSchema(importRowSchema),
@@ -679,18 +673,18 @@ export async function createChamberEnterpriseImport(
 export function listAdminClaims(input: {
   status?: ClaimStatusDto | 'all'
   countryCode?: string
-  cursor?: string | null
-  limit?: number
+  page?: number
+  size?: number
 } = {}) {
   return request(
     `admin/claims${queryString({
       status: input.status === 'all' ? undefined : input.status,
       country_code: input.countryCode?.trim().toUpperCase(),
-      cursor: input.cursor,
-      limit: input.limit ?? 20,
+      page: input.page ?? 1,
+      size: input.size ?? 20,
       sort: 'submitted_asc',
     })}`,
-    cursorPageSchema(enterpriseClaimSchema),
+    pagedListSchema(enterpriseClaimSchema),
   )
 }
 
@@ -716,18 +710,18 @@ export function reviewAdminClaim(
 export function listEnterpriseVerifications(input: {
   status?: VerificationStatusDto | 'all'
   countryCode?: string
-  cursor?: string | null
-  limit?: number
+  page?: number
+  size?: number
 } = {}) {
   return request(
     `admin/enterprise-verifications${queryString({
       status: input.status === 'all' ? undefined : input.status,
       country_code: input.countryCode?.trim().toUpperCase(),
-      cursor: input.cursor,
-      limit: input.limit ?? 20,
+      page: input.page ?? 1,
+      size: input.size ?? 20,
       sort: 'submitted_asc',
     })}`,
-    cursorPageSchema(verificationApplicationSchema),
+    pagedListSchema(verificationApplicationSchema),
   )
 }
 
@@ -763,16 +757,16 @@ export function reviewEnterpriseVerification(
 }
 
 export function listEnterpriseDuplicates(input: {
-  cursor?: string | null
-  limit?: number
+  page?: number
+  size?: number
 } = {}) {
   return request(
     `admin/enterprise-duplicates${queryString({
-      cursor: input.cursor,
-      limit: input.limit ?? 20,
+      page: input.page ?? 1,
+      size: input.size ?? 20,
       sort: 'risk_desc',
     })}`,
-    cursorPageSchema(duplicateCaseSchema),
+    pagedListSchema(duplicateCaseSchema),
   )
 }
 
@@ -796,17 +790,17 @@ export function actOnEnterpriseDuplicate(
 
 export function listOwnershipDisputes(input: {
   status?: string | 'all'
-  cursor?: string | null
-  limit?: number
+  page?: number
+  size?: number
 } = {}) {
   return request(
     `admin/ownership-disputes${queryString({
       status: input.status === 'all' ? undefined : input.status,
-      cursor: input.cursor,
-      limit: input.limit ?? 20,
+      page: input.page ?? 1,
+      size: input.size ?? 20,
       sort: 'created_asc',
     })}`,
-    cursorPageSchema(ownershipDisputeSchema),
+    pagedListSchema(ownershipDisputeSchema),
   )
 }
 
@@ -841,19 +835,19 @@ export function listManagementStaff(input: {
   keyword?: string
   status?: 'active' | 'revoked' | 'all'
   roleTemplate?: string | 'all'
-  cursor?: string | null
-  limit?: number
+  page?: number
+  size?: number
 } = {}) {
   return request(
     `management/staff${queryString({
       keyword: input.keyword?.trim(),
       status: input.status === 'all' ? undefined : input.status,
       role_template: input.roleTemplate === 'all' ? undefined : input.roleTemplate,
-      cursor: input.cursor,
-      limit: input.limit ?? 20,
+      page: input.page ?? 1,
+      size: input.size ?? 20,
       sort: 'created_desc',
     })}`,
-    cursorPageSchema(staffAssignmentSchema),
+    pagedListSchema(staffAssignmentSchema),
   )
 }
 
@@ -899,7 +893,7 @@ export function createChamberAdminAccount(
   },
 ) {
   return request(
-    `management/chambers/${encodeURIComponent(chamberId)}/admin-accounts`,
+    `management/chambers/${encodeURIComponent(chamberId)}/administrator`,
     staffAssignmentSchema,
     {
       method: 'POST',
@@ -923,19 +917,19 @@ export function listChamberAdminAccounts(
   input: {
     keyword?: string
     status?: 'active' | 'revoked' | 'all'
-    cursor?: string | null
-    limit?: number
+    page?: number
+    size?: number
   } = {},
 ) {
   return request(
     `management/chambers/${encodeURIComponent(chamberId)}/admin-accounts${queryString({
       keyword: input.keyword?.trim(),
       status: input.status === 'all' ? undefined : input.status,
-      cursor: input.cursor,
-      limit: input.limit ?? 20,
+      page: input.page ?? 1,
+      size: input.size ?? 20,
       sort: 'created_desc',
     })}`,
-    cursorPageSchema(staffAssignmentSchema),
+    pagedListSchema(staffAssignmentSchema),
   )
 }
 

@@ -896,8 +896,8 @@ function RecordForm({ config, open, onOpenChange, resource, initial, onSaved }: 
     setStatus(initial?.status ?? 'active')
     setFeatured(initial?.raw?.is_home === true)
     if (isCategory) {
-      void listScaffoldedRecords(resource, { status: 'all', limit: 100 })
-        .then((result) => setParentOptions(result.items.filter((item) => item.id !== initial?.id)))
+      void listScaffoldedRecords(resource, { status: 'all', page: 1, size: 100 })
+        .then((result) => setParentOptions(result.list.filter((item) => item.id !== initial?.id)))
         .catch(() => setParentOptions([]))
     } else {
       setParentOptions([])
@@ -1301,20 +1301,20 @@ function InquiryScreen({ config, resource }: { config: ModuleConfig; resource: s
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<unknown>(null)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [nextPage, setNextPage] = useState<number | null>(null)
   const [selected, setSelected] = useState<ScaffoldedRecord | null>(null)
   const [nextStatus, setNextStatus] = useState('processing')
   const [followUpNote, setFollowUpNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const load = useCallback(async (cursor?: string | null) => {
-    const append = Boolean(cursor)
+  const load = useCallback(async (page = 1) => {
+    const append = page > 1
     append ? setLoadingMore(true) : setLoading(true)
     if (!append) setError(null)
     try {
-      const result = await listScaffoldedRecords(resource, { keyword, status: statusFilter, cursor, limit: 20 })
-      setItems((current) => append ? [...current, ...result.items] : result.items)
-      setNextCursor(result.next_cursor)
+      const result = await listScaffoldedRecords(resource, { keyword, status: statusFilter, page, size: 20 })
+      setItems((current) => append ? [...current, ...result.list] : result.list)
+      setNextPage(page * result.size < result.total ? page + 1 : null)
     } catch (nextError) {
       if (append) {
         toast.error(nextError instanceof Error ? nextError.message : '加载更多失败，请稍后重试')
@@ -1394,10 +1394,10 @@ function InquiryScreen({ config, resource }: { config: ModuleConfig; resource: s
         items={items}
         loading={loading}
         loadingMore={loadingMore}
-        hasMore={Boolean(nextCursor)}
+        hasMore={Boolean(nextPage)}
         error={error}
         onRetry={() => void load()}
-        onLoadMore={() => void load(nextCursor)}
+        onLoadMore={() => nextPage && void load(nextPage)}
         onEdit={(item) => {
           setSelected(item)
           setNextStatus(item.status === 'completed' ? 'completed' : 'processing')
@@ -1685,7 +1685,7 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<unknown>(null)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [nextPage, setNextPage] = useState<number | null>(null)
   const [keyword, setKeyword] = useState('')
   const [status, setStatus] = useState('all')
   const [adminChamber, setAdminChamber] = useState<ScaffoldedRecord | null>(null)
@@ -1694,7 +1694,7 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
   const [adminListLoading, setAdminListLoading] = useState(false)
   const [adminListLoadingMore, setAdminListLoadingMore] = useState(false)
   const [adminListError, setAdminListError] = useState<unknown>(null)
-  const [adminNextCursor, setAdminNextCursor] = useState<string | null>(null)
+  const [adminNextPage, setAdminNextPage] = useState<number | null>(null)
   const [adminKeywordDraft, setAdminKeywordDraft] = useState('')
   const [adminKeyword, setAdminKeyword] = useState('')
   const [adminStatus, setAdminStatus] = useState<'active' | 'revoked' | 'all'>('all')
@@ -1718,15 +1718,15 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
     [config.kind],
   )
 
-  const load = useCallback(async (cursor?: string | null) => {
+  const load = useCallback(async (page = 1) => {
     if (params.module === 'home' || config.kind === 'settings' || config.kind === 'inquiry') return
-    const append = Boolean(cursor)
+    const append = page > 1
     append ? setLoadingMore(true) : setLoading(true)
     if (!append) setError(null)
     try {
-      const result = await listScaffoldedRecords(resource, { keyword, status, cursor, limit: 20 })
-      setItems((current) => append ? [...current, ...result.items] : result.items)
-      setNextCursor(result.next_cursor)
+      const result = await listScaffoldedRecords(resource, { keyword, status, page, size: 20 })
+      setItems((current) => append ? [...current, ...result.list] : result.list)
+      setNextPage(page * result.size < result.total ? page + 1 : null)
     } catch (nextError) {
       if (append) {
         toast.error(nextError instanceof Error ? nextError.message : '加载更多失败，请稍后重试')
@@ -1758,22 +1758,22 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
     options: {
       keyword?: string
       status?: 'active' | 'revoked' | 'all'
-      cursor?: string | null
+      page?: number
     } = {},
   ) {
-    const cursor = options.cursor ?? null
-    const append = Boolean(cursor)
+    const page = options.page ?? 1
+    const append = page > 1
     append ? setAdminListLoadingMore(true) : setAdminListLoading(true)
     if (!append) setAdminListError(null)
     try {
       const result = await listChamberAdminAccounts(chamber.id, {
         keyword: options.keyword ?? adminKeyword,
         status: options.status ?? adminStatus,
-        cursor,
-        limit: 20,
+        page,
+        size: 20,
       })
-      setAdminItems((current) => append ? [...current, ...result.items] : result.items)
-      setAdminNextCursor(result.page.next_cursor ?? null)
+      setAdminItems((current) => append ? [...current, ...result.list] : result.list)
+      setAdminNextPage(page * result.size < result.total ? page + 1 : null)
     } catch (nextError) {
       if (append) {
         toast.error(nextError instanceof Error ? nextError.message : '管理员下一页加载失败')
@@ -1793,7 +1793,7 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
     setAdminKeyword('')
     setAdminStatus('all')
     setAdminItems([])
-    setAdminNextCursor(null)
+    setAdminNextPage(null)
     void loadChamberAdmins(chamber, { keyword: '', status: 'all' })
   }
 
@@ -1917,10 +1917,10 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
             items={items}
             loading={loading}
             loadingMore={loadingMore}
-            hasMore={Boolean(nextCursor)}
+            hasMore={Boolean(nextPage)}
             error={error}
             onRetry={() => void load()}
-            onLoadMore={() => void load(nextCursor)}
+            onLoadMore={() => nextPage && void load(nextPage)}
             onEdit={openEdit}
             onStatusAction={(item) => void changeStatus(item)}
             onManageAdmins={config.kind === 'organization' ? openAdminDialog : undefined}
@@ -2094,12 +2094,12 @@ function GenericLegacyModuleScreen({ module }: { module: string }) {
                 ) : null}
                 <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
                   <span>当前显示 {adminItems.length} 人</span>
-                  {adminNextCursor && adminChamber && (
+                  {adminNextPage && adminChamber && (
                     <Button
                       size="sm"
                       variant="ghost"
                       disabled={adminListLoadingMore}
-                      onClick={() => void loadChamberAdmins(adminChamber, { cursor: adminNextCursor })}
+                      onClick={() => void loadChamberAdmins(adminChamber, { page: adminNextPage })}
                     >
                       {adminListLoadingMore && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}加载更多
                     </Button>

@@ -7,13 +7,14 @@ describe('management login portals', () => {
       'admin',
       'operator',
       'chamber',
+      'enterprise',
     ])
     expect(new Set(loginPortals.map((portal) => portal.href)).size).toBe(loginPortals.length)
   })
 
   it('keeps all entries under the shared management origin', () => {
     for (const portal of loginPortals) {
-      expect(portal.href).toMatch(/^\/(admin|operation|chamber)\/login$/)
+      expect(portal.href).toMatch(/^\/(admin|operation|chamber|enterprise)\/login$/)
     }
   })
 
@@ -21,5 +22,8 @@ describe('management login portals', () => {
     expect(loginHrefForWorkspaceRole('platform_admin')).toBe('/admin/login')
     expect(loginHrefForWorkspaceRole('platform_operator')).toBe('/operation/login')
     expect(loginHrefForWorkspaceRole('chamber_admin')).toBe('/chamber/login')
+    expect(loginHrefForWorkspaceRole('enterprise_owner')).toBe('/enterprise/login')
+    expect(loginHrefForWorkspaceRole('enterprise_admin')).toBe('/enterprise/login')
+    expect(loginHrefForWorkspaceRole('enterprise_member')).toBe('/enterprise/login')
   })
 })

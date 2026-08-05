@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       context: session.data.context,
       expires_in: session.data.expires_in,
     })
-    setSessionCookies(response, session.data, randomUuid())
+    setSessionCookies(response, session.data, randomUuid(), 'management')
     return response
   } catch {
     return bffErrorResponse(

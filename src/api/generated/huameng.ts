@@ -184,11 +184,10 @@ export const currentChamberEnterpriseSchema = z.object({
 }).strict()
 
 export const currentChamberEnterprisePageSchema = z.object({
-  items: z.array(currentChamberEnterpriseSchema),
-  page: z.object({
-    next_cursor: nullableString.optional(),
-    has_more: z.boolean(),
-  }).strict(),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  size: z.number().int().positive(),
+  list: z.array(currentChamberEnterpriseSchema),
 }).strict()
 
 export const importJobSchema = z.object({
@@ -292,9 +291,10 @@ export const importRowSchema = z.object({
 
 export function pageSchema<T extends z.ZodTypeAny>(itemSchema: T) {
   return z.object({
-    items: z.array(itemSchema),
-    next_cursor: z.string().nullable(),
-    has_more: z.boolean(),
+    total: z.number().int().nonnegative(),
+    page: z.number().int().positive(),
+    size: z.number().int().positive(),
+    list: z.array(itemSchema),
   }).strict()
 }
 

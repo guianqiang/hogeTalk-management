@@ -16,6 +16,12 @@ import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { verifyManagementPhone } from '@/api/client/management'
 import {
+  bindEnterprisePhone,
+  changeEnterprisePassword,
+  getEnterpriseAccount,
+  updateEnterpriseAccountProfile,
+} from '@/api/client/enterprise-workspace'
+import {
   changeManagementPassword,
   getManagementAccount,
   updateManagementProfile,
@@ -40,6 +46,10 @@ interface AccountDetails {
   status: string
   maskedPhone: string
   createdAt: string | null
+  avatarUrl: string | null
+  locale: string
+  timezone: string
+  profileVersion: number
 }
 
 function stringValue(value: unknown) {
@@ -61,6 +71,7 @@ export function AccountProfileScreen() {
   const params = useParams<{ workspaceId: string }>()
   const { currentUser, availableWorkspaces, refreshAccount } = useManagement()
   const workspace = availableWorkspaces.find((item) => item.id === params.workspaceId)
+  const isEnterprise = workspace?.kind === 'enterprise'
   const [editOpen, setEditOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [phoneOpen, setPhoneOpen] = useState(false)
@@ -84,13 +95,18 @@ export function AccountProfileScreen() {
     let active = true
     setAccountLoading(true)
     setAccountError(null)
-    void getManagementAccount()
+    const requestAccount = isEnterprise ? getEnterpriseAccount() : getManagementAccount()
+    void requestAccount
       .then((account) => {
         if (!active) return
         setAccountDetails({
           status: stringValue(account.status),
           maskedPhone: stringValue(account.masked_phone),
           createdAt: stringValue(account.created_at) || null,
+          avatarUrl: stringValue(account.avatar_url) || null,
+          locale: stringValue(account.locale) || 'zh-CN',
+          timezone: stringValue(account.timezone) || 'Asia/Shanghai',
+          profileVersion: typeof account.profile_version === 'number' ? account.profile_version : 0,
         })
       })
       .catch((error) => {
@@ -103,7 +119,7 @@ export function AccountProfileScreen() {
     return () => {
       active = false
     }
-  }, [])
+  }, [isEnterprise])
 
   if (!currentUser || !workspace) return null
 
@@ -120,10 +136,16 @@ export function AccountProfileScreen() {
     : accountDetails?.status === 'suspended'
       ? 'bg-red-50 text-red-700'
       : 'bg-muted text-muted-foreground'
-  const organizationType = workspace.kind === 'platform' ? '华盟平台' : '商会组织'
+  const organizationType = workspace.kind === 'platform'
+    ? '华盟平台'
+    : workspace.kind === 'enterprise'
+      ? '企业'
+      : '商会组织'
   const managementScope = workspace.kind === 'platform'
     ? '可按当前有效菜单处理华盟平台范围内的管理事项'
-    : '仅可管理当前所属商会及后端授予的业务'
+    : workspace.kind === 'enterprise'
+      ? '仅可维护当前唯一绑定企业的工作台数据及后端授予的业务'
+      : '仅可管理当前所属商会及后端授予的业务'
   const phoneText = accountLoading
     ? '正在获取…'
     : accountDetails?.maskedPhone || '暂未提供'
@@ -136,7 +158,28 @@ export function AccountProfileScreen() {
     }
     setSubmitting(true)
     try {
-      await updateManagementProfile(currentUser.id, displayName.trim())
+      if (isEnterprise) {
+        if (!accountDetails) throw new Error('账号详情尚未加载完成，请稍后重试')
+        const account = await updateEnterpriseAccountProfile({
+          displayName: displayName.trim(),
+          avatarUrl: accountDetails.avatarUrl,
+          locale: accountDetails.locale,
+          timezone: accountDetails.timezone,
+          expectedVersion: accountDetails.profileVersion,
+        })
+        setAccountDetails((current) => current ? {
+          ...current,
+          status: account.status,
+          maskedPhone: account.masked_phone ?? '',
+          createdAt: account.created_at,
+          avatarUrl: account.avatar_url,
+          locale: account.locale,
+          timezone: account.timezone,
+          profileVersion: account.profile_version,
+        } : current)
+      } else {
+        await updateManagementProfile(currentUser.id, displayName.trim())
+      }
       setSavedDisplayName(displayName.trim())
       setEditOpen(false)
       try {
@@ -159,7 +202,11 @@ export function AccountProfileScreen() {
     }
     setSubmitting(true)
     try {
-      await changeManagementPassword(newPassword, confirmationToken.trim())
+      if (isEnterprise) {
+        await changeEnterprisePassword(newPassword, confirmationToken.trim())
+      } else {
+        await changeManagementPassword(newPassword, confirmationToken.trim())
+      }
       toast.success('密码已修改，请重新登录')
       window.location.assign('/login')
     } catch (nextError) {
@@ -177,13 +224,19 @@ export function AccountProfileScreen() {
     }
     setSubmitting(true)
     try {
-      const result = await verifyManagementPhone(challengeId, code)
+      const result = isEnterprise
+        ? await bindEnterprisePhone(challengeId, code)
+        : await verifyManagementPhone(challengeId, code)
       setAccountDetails((current) => current
         ? { ...current, maskedPhone: result.masked_value }
         : {
           status: 'active',
           maskedPhone: result.masked_value,
           createdAt: null,
+          avatarUrl: null,
+          locale: 'zh-CN',
+          timezone: 'Asia/Shanghai',
+          profileVersion: 0,
         })
       setPhoneOpen(false)
       setPhoneConfirmationToken('')
@@ -302,7 +355,7 @@ export function AccountProfileScreen() {
               <div className="rounded-xl border p-4">
                 <p className="text-sm font-medium">登录密码</p>
                 <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                  修改密码后，现有管理会话将失效，需要使用新密码重新登录。
+                  修改密码后，现有登录会话将失效，需要使用新密码重新登录。
                 </p>
                 <Button
                   className="mt-4"
@@ -349,7 +402,7 @@ export function AccountProfileScreen() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>编辑账号资料</DialogTitle>
-            <DialogDescription>展示名称用于管理台识别，不改变账号授权和手机号登录标识。</DialogDescription>
+            <DialogDescription>展示名称用于工作台识别，不改变账号授权和手机号登录标识。</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -376,7 +429,7 @@ export function AccountProfileScreen() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>修改密码</DialogTitle>
-            <DialogDescription>密码变更后应撤销全部身份域的现有会话，并要求重新登录。</DialogDescription>
+            <DialogDescription>密码变更后会撤销当前账号的现有会话，并要求重新登录。</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -395,6 +448,7 @@ export function AccountProfileScreen() {
               onChange={setConfirmationToken}
               disabled={submitting}
               description="验证码只发送到当前账号已验证的手机号；填写完成后即可修改密码。"
+              authDomain={isEnterprise ? 'enterprise' : 'management'}
             />
           </div>
           <DialogFooter>
@@ -425,7 +479,8 @@ export function AccountProfileScreen() {
             onChange={setPhoneConfirmationToken}
             disabled={submitting}
             label="待验证手机号"
-            description="验证码将发送到下面填写的手机号，验证成功后绑定到当前管理账号。"
+            description="验证码将发送到下面填写的手机号，验证成功后绑定到当前账号。"
+            authDomain={isEnterprise ? 'enterprise' : 'management'}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setPhoneOpen(false)}>取消</Button>

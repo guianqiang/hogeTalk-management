@@ -1,6 +1,13 @@
 'use client'
 
 import {
+  enterpriseSessionDomain,
+  getEnterpriseAccount,
+  getEnterpriseWorkspace,
+  loginEnterpriseWorkspace,
+  type EnterpriseWorkspaceDto,
+} from '@/api/client/enterprise-workspace'
+import {
   createContext,
   useCallback,
   useContext,
@@ -33,7 +40,9 @@ import type {
   ManagementUser,
   Workspace,
   WorkspaceSnapshot,
+  WorkspaceRole,
 } from './types'
+import type { LoginPortal } from '@/features/auth/login-portals'
 
 const emptySnapshot: WorkspaceSnapshot = {
   affiliations: [],
@@ -52,6 +61,7 @@ interface ManagementContextValue {
   preferredWorkspaceId: string | null
   workspaceData: Record<string, WorkspaceSnapshot>
   login: (
+    portal: LoginPortal,
     identifier: string,
     countryCode: string,
     password: string,
@@ -77,12 +87,44 @@ function userFromAccount(accountId: string, displayName = '管理账号'): Manag
 }
 
 function fallbackDisplayName(
-  role: 'platform_admin' | 'platform_operator' | 'chamber_admin' | undefined,
+  role: WorkspaceRole | undefined,
 ) {
   if (role === 'platform_admin') return '华盟平台管理员'
   if (role === 'platform_operator') return '华盟平台运营员'
   if (role === 'chamber_admin') return '商会管理员'
+  if (role === 'enterprise_owner') return '企业所有者'
+  if (role === 'enterprise_admin') return '企业管理员'
+  if (role === 'enterprise_member') return '企业成员'
   return '管理账号'
+}
+
+function enterpriseWorkspace(dto: EnterpriseWorkspaceDto): Workspace {
+  const role = `enterprise_${dto.role ?? 'member'}` as WorkspaceRole
+  const menuKeys: Workspace['menuKeys'] = []
+  if (dto.permissions.includes('enterprise_workspace.access')) menuKeys.push('enterprise_workspace')
+  if (dto.permissions.includes('supply_demand.read')) menuKeys.push('supply_demand')
+  if (dto.permissions.includes('ai_card.read')) menuKeys.push('ai_card')
+  if (dto.enterprise === null) {
+    return {
+      id: `enterprise-${dto.accountId}`,
+      name: '企业工作台',
+      shortName: '账号中心',
+      kind: 'enterprise',
+      role,
+      staffTitle: '未关联企业',
+      menuKeys,
+    }
+  }
+  const enterprise = dto.enterprise
+  return {
+    id: enterprise.id,
+    name: enterprise.legalName,
+    shortName: enterprise.displayName,
+    kind: 'enterprise',
+    role,
+    staffTitle: fallbackDisplayName(role),
+    menuKeys,
+  }
 }
 
 export function managementAccountDisplayName(
@@ -105,7 +147,7 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
 
   const refreshWorkspace = useCallback(async (workspaceId: string) => {
     const workspace = availableWorkspaces.find((item) => item.id === workspaceId)
-    if (workspace?.kind === 'platform') {
+    if (workspace?.kind === 'platform' || workspace?.kind === 'enterprise') {
       setWorkspaceData((current) => ({
         ...current,
         [workspaceId]: {
@@ -155,7 +197,24 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     }
   }, [availableWorkspaces])
 
-  const bootstrap = useCallback(async () => {
+  const bootstrap = useCallback(async (
+    domain: 'management' | 'enterprise' = enterpriseSessionDomain(),
+  ) => {
+    if (domain === 'enterprise') {
+      const [workspaceDto, account] = await Promise.all([
+        getEnterpriseWorkspace(),
+        getEnterpriseAccount().catch(() => null),
+      ])
+      const workspace = enterpriseWorkspace(workspaceDto)
+      setCurrentUser(userFromAccount(
+        workspaceDto.accountId,
+        account?.display_name || fallbackDisplayName(workspace.role),
+      ))
+      setAvailableWorkspaces([workspace])
+      setPreferredWorkspaceId(workspace.id)
+      setHydrated(true)
+      return { workspaces: [workspace] }
+    }
     const [me, account] = await Promise.all([
       getManagementMe(),
       getManagementAccount().catch(() => null),
@@ -171,7 +230,7 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     setAvailableWorkspaces(workspaces)
     setPreferredWorkspaceId(me.enterprise.enterprise_id)
     setHydrated(true)
-    return { me, workspaces }
+    return { workspaces }
   }, [])
 
   useEffect(() => {
@@ -183,22 +242,7 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
       return
     }
     let active = true
-    void Promise.all([
-      getManagementMe(),
-      getManagementAccount().catch(() => null),
-    ])
-      .then(([me, account]) => {
-        if (!active) return
-        setCurrentUser(userFromAccount(
-          me.account_id,
-          managementAccountDisplayName(
-            account,
-            fallbackDisplayName(me.enterprise.role_template),
-          ),
-        ))
-        setAvailableWorkspaces([mapWorkspace(me.enterprise)])
-        setPreferredWorkspaceId(me.enterprise.enterprise_id)
-      })
+    void bootstrap()
       .catch(() => {
         if (!active) return
         setCurrentUser(null)
@@ -211,16 +255,33 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     return () => {
       active = false
     }
-  }, [pathname])
+  }, [bootstrap, pathname])
 
-  const login = useCallback(async (identifier: string, countryCode: string, password: string) => {
+  const login = useCallback(async (
+    portal: LoginPortal,
+    identifier: string,
+    countryCode: string,
+    password: string,
+  ) => {
+    if (portal === 'enterprise') {
+      await loginEnterpriseWorkspace(identifier, countryCode, password)
+      await bootstrap('enterprise')
+      return null
+    }
     const result = await loginManagement(identifier, countryCode, password)
     if ('next_step' in result) return result
-    await bootstrap()
+    await bootstrap('management')
     return null
   }, [bootstrap])
 
   const refreshAccount = useCallback(async () => {
+    if (enterpriseSessionDomain() === 'enterprise') {
+      const account = await getEnterpriseAccount()
+      setCurrentUser((current) => current
+        ? userFromAccount(current.id, account.display_name || current.name)
+        : current)
+      return
+    }
     const account = await getManagementAccount()
     setCurrentUser((current) => current
       ? userFromAccount(

@@ -50,7 +50,7 @@ const statusLabels: Record<string, string> = {
   archived: '已归档',
 }
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, label }: { status: string; label?: string }) {
   return (
     <Badge
       variant="outline"
@@ -65,7 +65,7 @@ export function StatusBadge({ status }: { status: string }) {
               : 'border-border bg-muted/50 text-muted-foreground',
       )}
     >
-      {statusLabels[status] ?? status}
+      {label ?? statusLabels[status] ?? status}
     </Badge>
   )
 }

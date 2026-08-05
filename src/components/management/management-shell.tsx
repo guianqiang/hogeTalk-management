@@ -10,11 +10,13 @@ import {
   ChevronDown,
   CircleGauge,
   ClipboardCheck,
+  ContactRound,
   Globe2,
   Handshake,
   LogOut,
   Menu,
   Newspaper,
+  PackageSearch,
   Settings2,
   UserRound,
   UserRoundCog,
@@ -51,6 +53,8 @@ const navIcons = {
   globe: Globe2,
   settings: Settings2,
   partner: Handshake,
+  supply: PackageSearch,
+  card: ContactRound,
 } satisfies Record<ManagementNavIcon, typeof CircleGauge>
 
 export function ManagementShell({ children }: { children: React.ReactNode }) {

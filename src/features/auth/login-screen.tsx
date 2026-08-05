@@ -68,7 +68,7 @@ export function LoginScreen({
     setFormError(null)
     setSubmitting(true)
     try {
-      const outcome = await login(identifier, 'CN', password)
+      const outcome = await login(portal, identifier, 'CN', password)
       if (outcome) {
         setPasswordChangeToken(outcome.password_change_token)
         setPassword('')
@@ -98,7 +98,7 @@ export function LoginScreen({
     setSubmitting(true)
     try {
       await completeInitialManagementPassword(passwordChangeToken, newPassword)
-      const outcome = await login(identifier, 'CN', newPassword)
+      const outcome = await login(portal, identifier, 'CN', newPassword)
       if (outcome) throw new Error('新密码尚未生效，请重新登录')
       toast.success('新密码设置成功，已进入管理后台')
     } catch (error) {
@@ -198,7 +198,7 @@ export function LoginScreen({
       ) : (
       <form onSubmit={submit} className="space-y-5">
         <div className="space-y-2">
-          <Label htmlFor={identifierId}>管理账号或手机号</Label>
+          <Label htmlFor={identifierId}>{portal === 'enterprise' ? '企业账号或手机号' : '管理账号或手机号'}</Label>
           <Input
             id={identifierId}
             className="h-11 font-data focus-visible:border-ember-500 focus-visible:ring-ember-500/20"
@@ -208,7 +208,7 @@ export function LoginScreen({
               if (formError) setFormError(null)
             }}
             autoComplete="username"
-            placeholder="请输入管理账号或已验证手机号"
+            placeholder={portal === 'enterprise' ? '请输入企业账号或已验证手机号' : '请输入管理账号或已验证手机号'}
             autoFocus
             required
           />

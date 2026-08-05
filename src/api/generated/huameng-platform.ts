@@ -4,15 +4,12 @@ import { managementMenuKeySchema } from './huameng'
 export { managementMenuKeySchema } from './huameng'
 export type { ManagementMenuKey } from './huameng'
 
-export const pageMetaSchema = z.object({
-  next_cursor: z.string().nullable().optional(),
-  has_more: z.boolean(),
-}).strict()
-
-export function cursorPageSchema<T extends z.ZodTypeAny>(itemSchema: T) {
+export function pagedListSchema<T extends z.ZodTypeAny>(itemSchema: T) {
   return z.object({
-    items: z.array(itemSchema),
-    page: pageMetaSchema,
+    total: z.number().int().nonnegative(),
+    page: z.number().int().positive(),
+    size: z.number().int().positive(),
+    list: z.array(itemSchema),
   }).strict()
 }
 

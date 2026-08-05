@@ -1,7 +1,18 @@
 import type { ManagementMenuKey } from '@/api/generated/huameng'
 
-export type WorkspaceKind = 'platform' | 'chamber'
-export type WorkspaceRole = 'platform_admin' | 'platform_operator' | 'chamber_admin'
+export type WorkspaceKind = 'platform' | 'chamber' | 'enterprise'
+export type WorkspaceRole =
+  | 'platform_admin'
+  | 'platform_operator'
+  | 'chamber_admin'
+  | 'enterprise_owner'
+  | 'enterprise_admin'
+  | 'enterprise_member'
+export type WorkspaceMenuKey =
+  | ManagementMenuKey
+  | 'enterprise_workspace'
+  | 'supply_demand'
+  | 'ai_card'
 
 export interface Workspace {
   id: string
@@ -11,7 +22,7 @@ export interface Workspace {
   kind: WorkspaceKind
   role: WorkspaceRole
   staffTitle: string
-  menuKeys: ManagementMenuKey[]
+  menuKeys: WorkspaceMenuKey[]
 }
 
 export interface MockUser {

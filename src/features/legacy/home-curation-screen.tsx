@@ -444,12 +444,11 @@ function ContentPicker({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [keywordInput, setKeywordInput] = useState('')
   const [keyword, setKeyword] = useState('')
-  const [cursorStack, setCursorStack] = useState<Array<string | null>>([null])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [hasNextPage, setHasNextPage] = useState(false)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<unknown>(null)
-  const cursor = cursorStack[cursorStack.length - 1]
 
   const load = useCallback(async () => {
     if (!open) return
@@ -459,17 +458,17 @@ function ContentPicker({
       const result = await listHomeSection(section.key, {
         keyword,
         homeOnly: false,
-        cursor,
-        limit: 8,
+        page,
+        size: 8,
       })
-      setItems(result.items)
-      setNextCursor(result.next_cursor)
+      setItems(result.list)
+      setHasNextPage(result.page * result.size < result.total)
     } catch (nextError) {
       setError(nextError)
     } finally {
       setLoading(false)
     }
-  }, [cursor, keyword, open, section.key])
+  }, [keyword, open, page, section.key])
 
   useEffect(() => {
     void load()
@@ -481,7 +480,7 @@ function ContentPicker({
 
   function search() {
     setKeyword(keywordInput.trim())
-    setCursorStack([null])
+    setPage(1)
   }
 
   async function submit() {
@@ -588,8 +587,8 @@ function ContentPicker({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={cursorStack.length === 1 || loading}
-                onClick={() => setCursorStack((current) => current.slice(0, -1))}
+                disabled={page === 1 || loading}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
               >
                 <ArrowLeft className="h-4 w-4" />
                 上一页
@@ -597,8 +596,8 @@ function ContentPicker({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={!nextCursor || loading}
-                onClick={() => nextCursor && setCursorStack((current) => [...current, nextCursor])}
+                disabled={!hasNextPage || loading}
+                onClick={() => setPage((current) => current + 1)}
               >
                 下一页
                 <ArrowRight className="h-4 w-4" />
@@ -726,9 +725,9 @@ function HomeSectionPanel({
     setLoading(true)
     setError(null)
     try {
-      const result = await listHomeSection(section.key, { homeOnly: true, limit: 50 })
-      setItems(result.items)
-      onCountChange(section.key, result.items.length)
+      const result = await listHomeSection(section.key, { homeOnly: true, page: 1, size: 50 })
+      setItems(result.list)
+      onCountChange(section.key, result.list.length)
     } catch (nextError) {
       setError(nextError)
     } finally {
@@ -751,7 +750,7 @@ function HomeSectionPanel({
     setBusyId(String(event.active.id))
     try {
       const result = await reorderHomeSection(section.key, ordered.map((item) => item.id))
-      setItems(result.items.length > 0 ? result.items : ordered)
+      setItems(result.list.length > 0 ? result.list : ordered)
       toast.success('首页展示顺序已更新')
     } catch (nextError) {
       setItems(previous)

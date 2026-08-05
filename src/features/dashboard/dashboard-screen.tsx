@@ -22,6 +22,7 @@ import { StatusBadge } from '@/components/management/status-badge'
 import { requestManagementResource } from '@/api/client/scaffolded-management'
 import { useManagement } from '@/lib/management'
 import { navigationForWorkspace } from '@/lib/navigation'
+import { EnterpriseWorkspaceScreen } from '@/features/enterprise-workspace/enterprise-workspace-screen'
 
 function date(value: string) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -57,6 +58,7 @@ export function DashboardScreen() {
   }, [workspace?.id, workspace?.kind])
 
   if (!workspace) return null
+  if (workspace.kind === 'enterprise') return <EnterpriseWorkspaceScreen />
 
   const isPlatform = workspace.kind === 'platform'
   const activeAffiliations = snapshot?.affiliations.filter((item) => item.status === 'active') ?? []

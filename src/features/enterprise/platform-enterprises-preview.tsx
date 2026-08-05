@@ -90,9 +90,10 @@ export function PlatformEnterprisesPreview() {
       const result = await listPlatformEnterprises({
         keyword,
         status: status === 'all' ? undefined : status as 'enabled' | 'disabled',
-        limit: 100,
+        page: 1,
+        size: 100,
       })
-      setItems(result.items)
+      setItems(result.list)
     } catch (nextError) {
       setError(nextError)
     } finally {

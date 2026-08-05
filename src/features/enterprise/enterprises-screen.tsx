@@ -375,7 +375,7 @@ export function EnterprisesScreen() {
     setImportRowsLoading(true)
     try {
       const result = await listChamberEnterpriseImportRows(workspaceId, latestJob.jobId)
-      setImportRows(result.items)
+      setImportRows(result.list)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '导入行读取失败')
       setImportRows([])

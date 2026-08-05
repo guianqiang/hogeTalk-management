@@ -16,15 +16,17 @@ afterEach(() => {
 describe('portal home section sources', () => {
   it('loads selectable countries from the public enabled-country projection', async () => {
     const backend = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      items: [{ id: '1', code: 'MY', name: '马来西亚', status: 1 }],
-      next_cursor: null,
+      total: 1,
+      page: 1,
+      size: 100,
+      list: [{ id: '1', code: 'MY', name: '马来西亚', status: 1 }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', backend)
 
     await expect(listManagementCountryOptions()).resolves.toEqual([
       { code: 'MY', name: '马来西亚' },
     ])
-    expect(backend.mock.calls[0]?.[0]).toBe('/api/public/portal/countries?limit=100')
+    expect(backend.mock.calls[0]?.[0]).toBe('/api/public/portal/countries?page=1&size=100')
   })
 
   it.each([
@@ -35,14 +37,14 @@ describe('portal home section sources', () => {
     ['park', 'park'],
   ])('uses the CMS contentType contract for %s', async (sectionKey, contentType) => {
     const backend = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      items: [],
+      list: [],
       total: 0,
       page: 1,
       size: 8,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', backend)
 
-    await listHomeSection(sectionKey, { limit: 8 })
+    await listHomeSection(sectionKey, { size: 8 })
 
     expect(backend.mock.calls[0]?.[0]).toBe(
       `/api/management/cms/articles?contentType=${contentType}&page=1&size=8`,
@@ -51,17 +53,18 @@ describe('portal home section sources', () => {
 
   it('uses the formal education product type and page contract', async () => {
     const backend = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      items: [],
+      list: [],
       total: 0,
       page: 1,
       size: 8,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', backend)
 
-    await expect(listHomeSection('education', { limit: 8 })).resolves.toEqual({
-      items: [],
-      next_cursor: null,
-      has_more: false,
+    await expect(listHomeSection('education', { size: 8 })).resolves.toEqual({
+      total: 0,
+      page: 1,
+      size: 8,
+      list: [],
     })
 
     expect(backend.mock.calls[0]?.[0]).toBe(
@@ -79,17 +82,19 @@ describe('portal home section sources', () => {
         },
       ]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        items: [{ id: '9001', name: '东盟合作伙伴', status: 1 }],
-        next_cursor: null,
+        total: 1,
+        page: 1,
+        size: 100,
+        list: [{ id: '9001', name: '东盟合作伙伴', status: 1 }],
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', backend)
 
     await expect(listHomeSection('partners', { homeOnly: true })).resolves.toMatchObject({
-      items: [{ id: '9001', title: '东盟合作伙伴', is_home: true }],
+      list: [{ id: '9001', title: '东盟合作伙伴', is_home: true }],
     })
     expect(backend.mock.calls.map(([url]) => url)).toEqual([
       '/api/management/portal/site-config/sections',
-      '/api/management/portal/partners?limit=100',
+      '/api/management/portal/partners?page=1&size=100',
     ])
   })
 })
@@ -155,7 +160,7 @@ describe('management media upload contract', () => {
 
   it('uses a refreshed chamber logo access URL for display', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      items: [{
+      list: [{
         id: '341478560919220224',
         name: '中国—东盟商会',
         country_code: 'CN',
@@ -171,7 +176,7 @@ describe('management media upload contract', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
 
     await expect(listScaffoldedRecords('management/legacy/chambers')).resolves.toMatchObject({
-      items: [{
+      list: [{
         cover_url: 'https://media.test/logo.png?signature=refreshed',
         raw: {
           logo: 'hoge-media://341478560919220225',

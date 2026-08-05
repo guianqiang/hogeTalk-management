@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import type { ManagementAuthSessionDto } from '@/api/generated/huameng'
 import { randomUuid } from '@/lib/random-id'
 
 export const ACCESS_COOKIE = 'hm_management_access'
 export const CSRF_COOKIE = 'hm_management_csrf'
+export const DOMAIN_COOKIE = 'hm_management_domain'
 const LEGACY_REFRESH_COOKIE = 'hm_management_refresh'
 
 const secure = process.env.NODE_ENV === 'production'
@@ -33,14 +33,22 @@ export function callManagementBackend(path: string, init: RequestInit) {
 
 export function setSessionCookies(
   response: NextResponse,
-  session: ManagementAuthSessionDto,
+  session: { access_token: string; expires_in: number },
   csrfToken?: string,
+  domain: 'management' | 'enterprise' = 'management',
 ) {
   response.cookies.set(ACCESS_COOKIE, session.access_token, {
     ...sessionCookie,
     maxAge: session.expires_in,
   })
   response.cookies.set(LEGACY_REFRESH_COOKIE, '', { ...sessionCookie, maxAge: 0 })
+  response.cookies.set(DOMAIN_COOKIE, domain, {
+    httpOnly: false,
+    secure,
+    sameSite: 'strict',
+    path: '/',
+    maxAge: session.expires_in,
+  })
   if (csrfToken) {
     response.cookies.set(CSRF_COOKIE, csrfToken, {
       httpOnly: false,
@@ -53,10 +61,10 @@ export function setSessionCookies(
 }
 
 export function clearSessionCookies(response: NextResponse) {
-  for (const name of [ACCESS_COOKIE, LEGACY_REFRESH_COOKIE, CSRF_COOKIE]) {
+  for (const name of [ACCESS_COOKIE, LEGACY_REFRESH_COOKIE, CSRF_COOKIE, DOMAIN_COOKIE]) {
     response.cookies.set(name, '', {
       ...sessionCookie,
-      httpOnly: name !== CSRF_COOKIE,
+      httpOnly: name !== CSRF_COOKIE && name !== DOMAIN_COOKIE,
       maxAge: 0,
     })
   }

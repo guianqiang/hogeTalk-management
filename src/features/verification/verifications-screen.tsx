@@ -117,7 +117,7 @@ function levelRail(level: VerificationLevelDto) {
 export function VerificationsScreen() {
   const [status, setStatus] = useState<VerificationStatusDto | 'all'>('submitted')
   const [items, setItems] = useState<VerificationApplicationDto[]>([])
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [nextPage, setNextPage] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -131,14 +131,14 @@ export function VerificationsScreen() {
   const [validUntil, setValidUntil] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const load = useCallback(async (cursor?: string | null) => {
-    const append = Boolean(cursor)
+  const load = useCallback(async (page = 1) => {
+    const append = page > 1
     append ? setLoadingMore(true) : setLoading(true)
     if (!append) setError(null)
     try {
-      const result = await listEnterpriseVerifications({ status, cursor, limit: 20 })
-      setItems((current) => append ? [...current, ...result.items] : result.items)
-      setNextCursor(result.page.next_cursor ?? null)
+      const result = await listEnterpriseVerifications({ status, page, size: 20 })
+      setItems((current) => append ? [...current, ...result.list] : result.list)
+      setNextPage(page * result.size < result.total ? page + 1 : null)
     } catch (nextError) {
       if (!append) setError(nextError)
       else toast.error(nextError instanceof Error ? nextError.message : '无法加载更多认证申请')
@@ -299,9 +299,9 @@ export function VerificationsScreen() {
               </CardContent>
             </Card>
           ))}
-          {nextCursor && (
+          {nextPage && (
             <div className="flex justify-center pt-2">
-              <Button variant="outline" disabled={loadingMore} onClick={() => void load(nextCursor)}>
+              <Button variant="outline" disabled={loadingMore} onClick={() => void load(nextPage)}>
                 {loadingMore && <LoaderCircle className="h-4 w-4 animate-spin" />}
                 加载更多
               </Button>

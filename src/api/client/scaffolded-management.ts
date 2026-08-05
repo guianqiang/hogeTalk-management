@@ -22,9 +22,10 @@ export interface ScaffoldedRecord {
 }
 
 export interface ScaffoldedPage {
-  items: ScaffoldedRecord[]
-  next_cursor: string | null
-  has_more?: boolean
+  total: number
+  page: number
+  size: number
+  list: ScaffoldedRecord[]
 }
 
 export interface HomeStatRow {
@@ -198,8 +199,8 @@ export type ManagementCountryOption = {
 }
 
 export async function listManagementCountryOptions(): Promise<ManagementCountryOption[]> {
-  const result = pageItems(await request<unknown>('public/portal/countries?limit=100'))
-  return result.items
+  const result = pagedRecords(await request<unknown>('public/portal/countries?page=1&size=100'))
+  return result.list
     .filter((item) => Number(item.status) === 1 && typeof item.code === 'string')
     .map((item) => ({
       code: String(item.code).toUpperCase(),
@@ -297,30 +298,30 @@ function recordFromDto(dto: JsonRecord, route: ModuleRoute): ScaffoldedRecord {
   }
 }
 
-function pageItems(body: unknown): { items: JsonRecord[]; nextCursor: string | null; hasMore: boolean } {
+function pagedRecords(body: unknown): { total: number; page: number; size: number; list: JsonRecord[] } {
   const value = body && typeof body === 'object' ? body as JsonRecord : {}
-  const items = Array.isArray(value.items) ? value.items.filter((item): item is JsonRecord => (
+  const list = Array.isArray(value.list) ? value.list.filter((item): item is JsonRecord => (
     Boolean(item) && typeof item === 'object' && !Array.isArray(item)
   )) : []
-  const page = value.page && typeof value.page === 'object' ? value.page as JsonRecord : {}
   const pageNumber = asNumber(value.page)
   const pageSize = asNumber(value.size)
   const total = asNumber(value.total)
-  const pageHasMore = pageNumber !== undefined && pageSize !== undefined && total !== undefined
-    ? pageNumber * pageSize < total
-    : false
+  if (pageNumber === undefined || pageSize === undefined || total === undefined || !Array.isArray(value.list)) {
+    throw new ManagementApiError(502, 'E_CONTRACT_MISMATCH', '分页接口响应不符合冻结契约', '响应必须为 total、page、size、list', null)
+  }
   return {
-    items,
-    nextCursor: asString(value.next_cursor ?? page.next_cursor) ?? (pageHasMore ? String(pageNumber! + 1) : null),
-    hasMore: value.has_more === true || page.has_more === true || pageHasMore,
+    total,
+    page: pageNumber,
+    size: pageSize,
+    list,
   }
 }
 
 function toQuery(route: ModuleRoute, params: {
   keyword?: string
   status?: string
-  cursor?: string | null
-  limit?: number
+  page?: number
+  size?: number
 }) {
   const query = new URLSearchParams(route.query)
   if (params.keyword) query.set('keyword', params.keyword)
@@ -341,28 +342,22 @@ function toQuery(route: ModuleRoute, params: {
           : params.status,
     )
   }
-  const pageBased = ['article', 'cms-category', 'product', 'product-category', 'inquiry', 'chamber'].includes(route.kind)
-  if (pageBased) {
-    query.set('page', params.cursor ?? '1')
-    query.set('size', String(params.limit ?? 20))
-  } else {
-    if (params.cursor) query.set('cursor', params.cursor)
-    query.set('limit', String(params.limit ?? 20))
-  }
+  query.set('page', String(params.page ?? 1))
+  query.set('size', String(params.size ?? 20))
   return query
 }
 
 export async function listScaffoldedRecords(
   resource: string,
-  params: { keyword?: string; status?: string; cursor?: string | null; limit?: number } = {},
+  params: { keyword?: string; status?: string; page?: number; size?: number } = {},
 ) {
   const module = moduleFromResource(resource)
   if (!module) {
     const query = new URLSearchParams()
     if (params.keyword) query.set('keyword', params.keyword)
     if (params.status && params.status !== 'all') query.set('status', params.status)
-    if (params.cursor) query.set('cursor', params.cursor)
-    query.set('limit', String(params.limit ?? 20))
+    query.set('page', String(params.page ?? 1))
+    query.set('size', String(params.size ?? 20))
     return request<ScaffoldedPage>(`${resource}?${query.toString()}`)
   }
 
@@ -370,11 +365,12 @@ export async function listScaffoldedRecords(
   if (!route) {
     throw new ManagementApiError(404, 'E_RESOURCE_NOT_FOUND', '该管理模块尚未开放真实接口', null, null)
   }
-  const result = pageItems(await request<unknown>(`${route.path}?${toQuery(route, params).toString()}`))
+  const result = pagedRecords(await request<unknown>(`${route.path}?${toQuery(route, params).toString()}`))
   return {
-    items: result.items.map((item) => recordFromDto(item, route)),
-    next_cursor: result.nextCursor,
-    has_more: result.hasMore,
+    total: result.total,
+    page: result.page,
+    size: result.size,
+    list: result.list.map((item) => recordFromDto(item, route)),
   }
 }
 
@@ -388,8 +384,8 @@ export async function listCmsCategoryOptions(resource: string) {
     query: { contentType },
     kind: 'cms-category',
   }
-  const result = pageItems(await request<unknown>(`management/cms/categories?${query.toString()}`))
-  return result.items.map((item) => recordFromDto(item, route))
+  const result = pagedRecords(await request<unknown>(`management/cms/categories?${query.toString()}`))
+  return result.list.map((item) => recordFromDto(item, route))
 }
 
 function articlePayload(module: string, payload: JsonRecord) {
@@ -997,23 +993,24 @@ async function saveHomeSections(home: JsonRecord, sections: JsonRecord[]) {
 
 export async function listHomeSection(
   sectionKey: string,
-  params: { keyword?: string; homeOnly?: boolean; cursor?: string | null; limit?: number } = {},
+  params: { keyword?: string; homeOnly?: boolean; page?: number; size?: number } = {},
 ) {
   const route = homeSectionRoutes[sectionKey]
-  if (!route) return { items: [], next_cursor: null, has_more: false }
+  if (!route) return { total: 0, page: 1, size: params.size ?? 20, list: [] }
   if (!params.homeOnly) {
     const query = toQuery(route, {
       keyword: params.keyword,
       status: 'all',
-      cursor: params.cursor,
-      limit: params.limit,
+      page: params.page,
+      size: params.size,
     })
     const result = await request<JsonRecord>(`${route.path}?${query.toString()}`)
-    const page = pageItems(result)
+    const page = pagedRecords(result)
     return {
-      items: page.items.map((item) => recordFromDto(item, route)),
-      next_cursor: page.nextCursor,
-      has_more: page.hasMore,
+      total: page.total,
+      page: page.page,
+      size: page.size,
+      list: page.list.map((item) => recordFromDto(item, route)),
     }
   }
 
@@ -1024,21 +1021,22 @@ export async function listHomeSection(
     : []
 
   if (route.kind === 'partner') {
-    const listed = pageItems(await request<unknown>(`${route.path}?limit=100`))
+    const listed = pagedRecords(await request<unknown>(`${route.path}?page=1&size=100`))
     const byId = new Map(
-      listed.items.map((item) => {
+      listed.list.map((item) => {
         const record = recordFromDto(item, route)
         return [record.id, record] as const
       }),
     )
     return {
-      items: references.flatMap((reference) => {
+      total: references.length,
+      page: 1,
+      size: 100,
+      list: references.flatMap((reference) => {
         const id = asString(reference.resource_id)
         const record = id ? byId.get(id) : null
         return record ? [{ ...record, is_home: true }] : []
       }),
-      next_cursor: null,
-      has_more: false,
     }
   }
 
@@ -1059,9 +1057,10 @@ export async function listHomeSection(
     }
   }))
   return {
-    items: items.filter(Boolean) as ScaffoldedRecord[],
-    next_cursor: null,
-    has_more: false,
+    total: items.filter(Boolean).length,
+    page: 1,
+    size: Math.max(1, items.length),
+    list: items.filter(Boolean) as ScaffoldedRecord[],
   }
 }
 
@@ -1163,14 +1162,15 @@ function auditQuery(input: {
   keyword?: string
   start?: string
   end?: string
-  cursor?: string | null
-  limit?: number
+  page?: number
+  size?: number
 }) {
   const query = new URLSearchParams({
     scope_type: input.scopeType,
     scope_id: input.scopeId,
     sort: 'occurred_at_desc',
-    limit: String(input.limit ?? 50),
+    page: String(input.page ?? 1),
+    size: String(input.size ?? 50),
   })
   if (input.objectType) query.set('object_type', input.objectType)
   if (input.actionPrefix) query.set('action_prefix', input.actionPrefix)
@@ -1178,17 +1178,18 @@ function auditQuery(input: {
   if (input.keyword) query.set('keyword', input.keyword)
   if (input.start) query.set('start', input.start)
   if (input.end) query.set('end', input.end)
-  if (input.cursor) query.set('cursor', input.cursor)
   return query
 }
 
 export async function listManagementAudit(input: Parameters<typeof auditQuery>[0]) {
-  const result = await request<{ items: ManagementAuditRecord[]; next_cursor?: string | null }>(
+  const result = await request<{ total: number; page: number; size: number; list: ManagementAuditRecord[] }>(
     `management/audit-logs?${auditQuery(input).toString()}`,
   )
   return {
-    items: Array.isArray(result.items) ? result.items : [],
-    next_cursor: result.next_cursor ?? null,
+    total: result.total,
+    page: result.page,
+    size: result.size,
+    list: Array.isArray(result.list) ? result.list : [],
   }
 }
 

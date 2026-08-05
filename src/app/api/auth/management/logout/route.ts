@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   ACCESS_COOKIE,
   CSRF_COOKIE,
+  DOMAIN_COOKIE,
   bffErrorResponse,
   callManagementBackend,
   clearSessionCookies,
@@ -17,16 +18,20 @@ export async function POST(request: NextRequest) {
   }
 
   const accessToken = request.cookies.get(ACCESS_COOKIE)?.value
+  const domain = request.cookies.get(DOMAIN_COOKIE)?.value
 
   try {
     if (accessToken) {
-      await callManagementBackend('/auth/management/logout', {
+      await callManagementBackend(
+        domain === 'enterprise' ? '/auth/logout' : '/auth/management/logout',
+        {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'X-Request-Id': `req_${randomUuid().replaceAll('-', '')}`,
         },
-      })
+        },
+      )
     }
   } finally {
     const response = new NextResponse(null, { status: 204 })

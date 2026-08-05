@@ -1,6 +1,6 @@
 import type { WorkspaceRole } from '@/lib/types'
 
-export type LoginPortal = 'admin' | 'operator' | 'chamber'
+export type LoginPortal = 'admin' | 'operator' | 'chamber' | 'enterprise'
 
 export interface LoginPortalSummary {
   id: LoginPortal
@@ -32,12 +32,22 @@ export const loginPortals: LoginPortalSummary[] = [
     title: '商会组织门户',
     description: '维护会员企业、商会认证与组织协作信息。',
   },
+  {
+    id: 'enterprise',
+    href: '/enterprise/login',
+    eyebrow: '企业账号',
+    title: '企业工作台',
+    description: '维护企业供需信息、合作咨询与企业 AI 名片。',
+  },
 ]
 
 const loginPortalByWorkspaceRole = {
   platform_admin: 'admin',
   platform_operator: 'operator',
   chamber_admin: 'chamber',
+  enterprise_owner: 'enterprise',
+  enterprise_admin: 'enterprise',
+  enterprise_member: 'enterprise',
 } satisfies Record<WorkspaceRole, LoginPortal>
 
 export function loginHrefForWorkspaceRole(role: WorkspaceRole): string {

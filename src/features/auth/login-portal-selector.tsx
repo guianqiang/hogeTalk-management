@@ -2,6 +2,7 @@ import Link from 'next/link'
 import {
   ArrowUpRight,
   BarChart3,
+  BriefcaseBusiness,
   Landmark,
   ShieldCheck,
 } from 'lucide-react'
@@ -31,6 +32,12 @@ const portalStyles: Record<LoginPortal, {
     accent: 'text-ember-700',
     hover: 'hover:border-ember-300 hover:bg-ember-50/65',
   },
+  enterprise: {
+    icon: BriefcaseBusiness,
+    number: '04',
+    accent: 'text-ember-700',
+    hover: 'hover:border-ember-300 hover:bg-ember-50/65',
+  },
 }
 
 export function LoginPortalSelector() {
@@ -55,11 +62,11 @@ export function LoginPortalSelector() {
               你今天要进入哪一个工作台？
             </h1>
             <p className="mt-5 text-sm leading-7 text-muted-foreground">
-              三个入口共用同一套安全认证，登录后仍以账号的真实角色和授权范围为准。
+              四个入口共用同一账号体系，登录后仍以账号的真实角色和授权范围为准。
             </p>
           </div>
 
-          <div className="mt-10 grid border-y border-border/80 md:grid-cols-3">
+          <div className="mt-10 grid border-y border-border/80 sm:grid-cols-2 lg:grid-cols-4">
             {loginPortals.map((portal, index) => {
               const style = portalStyles[portal.id]
               const Icon = style.icon
@@ -67,7 +74,7 @@ export function LoginPortalSelector() {
                 <Link
                   key={portal.id}
                   href={portal.href}
-                  className={`group relative min-h-[260px] border-b border-border/80 p-6 transition-[background-color,border-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:border-b-0 md:p-7 ${index < loginPortals.length - 1 ? 'md:border-r' : ''} ${style.hover}`}
+                  className={`group relative min-h-[250px] border-b border-border/80 p-6 transition-[background-color,border-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:border-r lg:border-b-0 lg:p-7 ${index % 2 === 1 ? 'sm:border-r-0' : ''} ${index < loginPortals.length - 1 ? 'lg:border-r' : 'lg:border-r-0'} ${style.hover}`}
                 >
                   <div className="flex items-start justify-between">
                     <span className={`font-data text-[11px] font-semibold ${style.accent}`}>{style.number}</span>

@@ -136,7 +136,7 @@ export function AccountMembersScreen() {
   const workspace = availableWorkspaces.find((item) => item.id === params.workspaceId)
   const [items, setItems] = useState<StaffAssignmentDto[]>([])
   const [catalog, setCatalog] = useState<MenuCatalogDto | null>(null)
-  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [nextPage, setNextPage] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -170,14 +170,15 @@ export function AccountMembersScreen() {
         keyword,
         roleTemplate: workspace.kind === 'chamber' ? 'chamber_admin' : roleFilter,
         status: statusFilter,
-        limit: 20,
+        page: 1,
+        size: 20,
       })
       const [staff, menuCatalog] = await Promise.all([
         staffRequest,
         workspace.kind === 'platform' ? getManagementMenuCatalog() : Promise.resolve(null),
       ])
-      setItems(staff.items)
-      setNextCursor(staff.page.next_cursor ?? null)
+      setItems(staff.list)
+      setNextPage(staff.size < staff.total ? 2 : null)
       setCatalog(menuCatalog)
     } catch (nextError) {
       setError(nextError)
@@ -280,18 +281,18 @@ export function AccountMembersScreen() {
   }
 
   async function loadMore() {
-    if (!nextCursor) return
+    if (!nextPage) return
     setLoadingMore(true)
     try {
       const result = await listManagementStaff({
         keyword,
         roleTemplate: workspace?.kind === 'chamber' ? 'chamber_admin' : roleFilter,
         status: statusFilter,
-        cursor: nextCursor,
-        limit: 20,
+        page: nextPage,
+        size: 20,
       })
-      setItems((current) => [...current, ...result.items])
-      setNextCursor(result.page.next_cursor ?? null)
+      setItems((current) => [...current, ...result.list])
+      setNextPage(nextPage * result.size < result.total ? nextPage + 1 : null)
     } catch (nextError) {
       toast.error(nextError instanceof Error ? nextError.message : '下一页人员读取失败')
     } finally {
@@ -487,7 +488,7 @@ export function AccountMembersScreen() {
             </div>
             <div className="flex items-center justify-between border-t px-5 py-3 text-xs text-muted-foreground">
               <span>当前显示 {items.length} 人</span>
-              {nextCursor && (
+              {nextPage && (
                 <Button size="sm" variant="ghost" disabled={loadingMore} onClick={() => void loadMore()}>
                   {loadingMore && <LoaderCircle className="h-4 w-4 animate-spin" />}加载更多
                 </Button>
