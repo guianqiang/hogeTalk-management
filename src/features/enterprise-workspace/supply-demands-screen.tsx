@@ -83,7 +83,9 @@ export function SupplyDemandsScreen() {
   const [loading, setLoading] = useState(true)
   const [canManage, setCanManage] = useState(false)
   const [canManageConsultations, setCanManageConsultations] = useState(false)
+  const [canReadSentConsultations, setCanReadSentConsultations] = useState(false)
   const [consultations, setConsultations] = useState<SupplyDemandConsultationDto[]>([])
+  const [sentConsultations, setSentConsultations] = useState<SupplyDemandConsultationDto[]>([])
   const [unbound, setUnbound] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<SupplyDemandDto | null>(null)
@@ -100,13 +102,16 @@ export function SupplyDemandsScreen() {
         setRows([])
         setTotal(0)
         setConsultations([])
+        setSentConsultations([])
         setCanManage(false)
         setCanManageConsultations(false)
+        setCanReadSentConsultations(false)
         return
       }
       setUnbound(false)
       const mayManageConsultations = workspace.permissions.includes('supply_demand.consultation.manage')
-      const [result, consultationResult] = await Promise.all([
+      const mayReadSent = workspace.permissions.includes('supply_demand.read')
+      const [result, consultationResult, sentResult] = await Promise.all([
         listEnterpriseSupplyDemands({
           keyword: appliedKeyword,
           type: type || undefined,
@@ -117,12 +122,17 @@ export function SupplyDemandsScreen() {
         mayManageConsultations
           ? listEnterpriseSupplyDemandConsultations({ direction: 'received', page: 1, size: 10 })
           : Promise.resolve({ total: 0, page: 1, size: 10, list: [] }),
+        mayReadSent
+          ? listEnterpriseSupplyDemandConsultations({ direction: 'sent', page: 1, size: 10 })
+          : Promise.resolve({ total: 0, page: 1, size: 10, list: [] }),
       ])
       setRows(result.list)
       setTotal(result.total)
       setCanManage(workspace.permissions.includes('supply_demand.manage'))
       setCanManageConsultations(mayManageConsultations)
+      setCanReadSentConsultations(mayReadSent)
       setConsultations(consultationResult.list)
+      setSentConsultations(sentResult.list)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '供需数据加载失败')
     } finally {
@@ -337,7 +347,7 @@ export function SupplyDemandsScreen() {
                 <MessageSquareText className="h-4 w-4 text-ember-700" />
                 收到的合作咨询
               </h2>
-              <p className="mt-1 text-xs text-muted-foreground">查看网站访客针对已发布供需提交的合作意向。</p>
+              <p className="mt-1 text-xs text-muted-foreground">其他企业针对本企业已发布供需提交的合作意向。</p>
             </div>
             <span className="text-xs text-muted-foreground">最近 {consultations.length} 条</span>
           </div>
@@ -380,6 +390,44 @@ export function SupplyDemandsScreen() {
             </div>
           ) : (
             <div className="px-5 py-10 text-center text-sm text-muted-foreground">暂无收到的合作咨询</div>
+          )}
+        </section>
+      ) : null}
+
+      {canReadSentConsultations ? (
+        <section className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgb(15_23_42/0.04),0_4px_12px_rgb(15_23_42/0.04)]">
+          <div className="flex items-center justify-between border-b px-5 py-4">
+            <div>
+              <h2 className="flex items-center gap-2 font-display text-base font-semibold">
+                <Send className="h-4 w-4 text-ember-700" />
+                发出的合作咨询
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">本企业向其他企业供需发起的合作意向。</p>
+            </div>
+            <span className="text-xs text-muted-foreground">最近 {sentConsultations.length} 条</span>
+          </div>
+          {sentConsultations.length ? (
+            <div className="divide-y">
+              {sentConsultations.map((item) => (
+                <article key={item.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-center">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{item.supplyDemandTitle}</p>
+                      <StatusBadge status={item.status} label={consultationStatusLabels[item.status]} />
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.message}</p>
+                    {item.followupNote ? <p className="mt-1 text-xs text-ember-700">对方跟进：{item.followupNote}</p> : null}
+                  </div>
+                  <div className="text-xs leading-6 text-muted-foreground">
+                    <p className="font-medium text-foreground">{item.contactName}</p>
+                    <p>{item.contactPhone}</p>
+                    <p>{formatDate(item.createdAt)}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="px-5 py-10 text-center text-sm text-muted-foreground">暂无发出的合作咨询</div>
           )}
         </section>
       ) : null}

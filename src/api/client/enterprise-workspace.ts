@@ -548,6 +548,28 @@ export function actEnterpriseSupplyDemandConsultation(
   )
 }
 
+export function getPublicSupplyDemand(itemId: string) {
+  return request(
+    `v1/public/supply-demands/${encodeURIComponent(itemId)}`,
+    supplyDemandSchema,
+  )
+}
+
+export function createSupplyDemandConsultation(
+  itemId: string,
+  body: { message: string; contactName: string; contactPhone: string },
+) {
+  return request(
+    `v1/supply-demands/${encodeURIComponent(itemId)}/consultations`,
+    supplyDemandConsultationSchema,
+    {
+      method: 'POST',
+      idempotencyKey: idempotencyKey(),
+      body,
+    },
+  )
+}
+
 export function getEnterpriseAiCard() {
   return request('enterprise/ai-card', aiCardSchema.nullable())
 }

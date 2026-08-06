@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   AlertCircle,
   ArrowRight,
@@ -49,6 +49,7 @@ export function LoginScreen({
   density = 'default',
 }: LoginScreenProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const {
     hydrated,
     currentUser,
@@ -90,8 +91,21 @@ export function LoginScreen({
   useEffect(() => {
     if (!hydrated || !currentUser || !availableWorkspaces.length) return
     const preferred = availableWorkspaces.find((item) => item.id === preferredWorkspaceId)
-    router.replace(`/w/${preferred?.id ?? availableWorkspaces[0].id}`)
-  }, [availableWorkspaces, currentUser, hydrated, preferredWorkspaceId, router])
+    const workspaceId = preferred?.id ?? availableWorkspaces[0].id
+    const itemId = searchParams.get('itemId')?.trim() ?? ''
+    const next = searchParams.get('next')?.trim() ?? ''
+    if (
+      itemId
+      && /^\d+$/.test(itemId)
+      && (next === 'consult' || next === '/supply-demands/consult')
+    ) {
+      router.replace(
+        `/w/${workspaceId}/supply-demands/consult?itemId=${encodeURIComponent(itemId)}`,
+      )
+      return
+    }
+    router.replace(`/w/${workspaceId}`)
+  }, [availableWorkspaces, currentUser, hydrated, preferredWorkspaceId, router, searchParams])
 
   useEffect(() => {
     if (!resendSeconds) return

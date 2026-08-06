@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import {
   BarChart3,
   Building2,
@@ -220,15 +221,17 @@ export function EnterpriseLoginScreen() {
           </div>
 
           <div className="product-surface bg-card p-6 sm:p-8">
-            <LoginScreen
-              portal="enterprise"
-              eyebrow="企业账号"
-              title="登录"
-              description=""
-              submitLabel="进入企业工作台"
-              allowOtp
-              density="compact"
-            />
+            <Suspense fallback={<p className="text-sm text-muted-foreground">加载登录页…</p>}>
+              <LoginScreen
+                portal="enterprise"
+                eyebrow="企业账号"
+                title="登录"
+                description=""
+                submitLabel="进入企业工作台"
+                allowOtp
+                density="compact"
+              />
+            </Suspense>
           </div>
         </div>
       </section>
