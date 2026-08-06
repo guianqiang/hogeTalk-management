@@ -27,27 +27,22 @@ export async function POST(request: Request) {
   }
 
   try {
-    const backend = await callManagementBackend(
-      '/auth/enterprise-workspace/password/login',
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'X-Request-Id': request.headers.get('X-Request-Id')
-            ?? `req_${randomUuid().replaceAll('-', '')}`,
-          'User-Agent': request.headers.get('User-Agent')
-            ?? 'hogetalk-management-bff',
-        },
-        body: JSON.stringify(managementLoginBackendBody(input.data)),
+    const backend = await callManagementBackend('/v1/auth/enterprise-workspace/password/login', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Request-Id': request.headers.get('X-Request-Id')
+          ?? `req_${randomUuid().replaceAll('-', '')}`,
+        'User-Agent': request.headers.get('User-Agent')
+          ?? 'hogetalk-management-bff',
       },
-    )
+      body: JSON.stringify(managementLoginBackendBody(input.data)),
+    })
     const payload: unknown = await backend.json()
     if (!backend.ok) {
       const error = errorEnvelopeSchema.safeParse(payload)
-      return NextResponse.json(error.success ? error.data : payload, {
-        status: backend.status,
-      })
+      return NextResponse.json(error.success ? error.data : payload, { status: backend.status })
     }
     const session = enterpriseSessionSchema.safeParse(payload)
     if (!session.success) {
@@ -74,3 +69,4 @@ export async function POST(request: Request) {
     )
   }
 }
+

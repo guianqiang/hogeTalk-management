@@ -4,18 +4,16 @@ import { errorEnvelopeSchema } from '@/api/generated/huameng'
 import {
   bffErrorResponse,
   callManagementBackend,
+  setSessionCookies,
 } from '@/api/server/session'
-import { enterpriseAuthChallengeSchema } from '@/api/client/enterprise-workspace'
 import { randomUuid } from '@/lib/random-id'
+import { enterpriseSessionSchema } from '@/api/server/enterprise-session'
 
 export const dynamic = 'force-dynamic'
 
 const requestSchema = z.object({
-  purpose: z.enum(['login', 'password_reset', 'bind_phone']),
-  phone: z.string().min(4),
-  country_code: z.string().regex(/^[A-Z]{2}$/),
-  locale: z.string(),
-  risk_token: z.string(),
+  challenge_id: z.string().min(1),
+  code: z.string().min(4).max(8),
 }).strict()
 
 export async function POST(request: Request) {
@@ -25,19 +23,21 @@ export async function POST(request: Request) {
     return bffErrorResponse(
       422,
       'E_INPUT_INVALID',
-      '验证码参数不正确',
+      '验证码登录参数不正确',
       input.error.issues[0]?.message ?? null,
     )
   }
 
   try {
-    const backend = await callManagementBackend('/auth/challenges', {
+    const backend = await callManagementBackend('/v1/auth/enterprise-workspace/otp/login', {
       method: 'POST',
       headers: {
+        Accept: 'application/json',
         'Content-Type': 'application/json',
         'X-Request-Id': request.headers.get('X-Request-Id')
           ?? `req_${randomUuid().replaceAll('-', '')}`,
-        'User-Agent': request.headers.get('User-Agent') ?? 'hogetalk-management-bff',
+        'User-Agent': request.headers.get('User-Agent')
+          ?? 'hogetalk-management-bff',
       },
       body: JSON.stringify(input.data),
     })
@@ -46,21 +46,27 @@ export async function POST(request: Request) {
       const error = errorEnvelopeSchema.safeParse(payload)
       return NextResponse.json(error.success ? error.data : payload, { status: backend.status })
     }
-    const challenge = enterpriseAuthChallengeSchema.safeParse(payload)
-    if (!challenge.success) {
+    const parsedSession = enterpriseSessionSchema.safeParse(payload)
+    if (!parsedSession.success) {
       return bffErrorResponse(
         502,
         'E_CONTRACT_MISMATCH',
-        '验证码接口返回异常',
-        challenge.error.issues[0]?.message ?? null,
+        '企业工作台验证码登录响应不符合冻结契约',
+        parsedSession.error.issues[0]?.message ?? null,
       )
     }
-    return NextResponse.json(challenge.data)
+    const response = NextResponse.json({
+      account: parsedSession.data.account,
+      context: parsedSession.data.context,
+      expires_in: parsedSession.data.expires_in,
+    })
+    setSessionCookies(response, parsedSession.data, randomUuid(), 'enterprise')
+    return response
   } catch {
     return bffErrorResponse(
       502,
       'E_PROVIDER_UNAVAILABLE',
-      '无法连接 HogeTalk Agent 验证码服务',
+      '无法连接 HogeTalk Agent 企业工作台接口',
       '请检查 MANAGEMENT_API_BASE_URL 与后端进程。',
     )
   }

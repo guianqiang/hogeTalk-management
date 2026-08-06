@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { KeyRound, LoaderCircle, Pencil, Search } from 'lucide-react'
+import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   getEnterpriseWorkspacePermissionCatalog,
   listEnterpriseWorkspaceAccounts,
   updateEnterpriseWorkspacePermissions,
   type EnterpriseWorkspaceAccountDto,
+  type EnterpriseWorkspaceAccountScope,
   type WorkspacePermission,
   type WorkspacePermissionCatalogDto,
 } from '@/api/client/enterprise-workspace'
@@ -28,6 +30,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { QueueEmpty, QueueError, QueueLoading } from '@/features/governance/queue-state'
+import { useManagement } from '@/lib/management'
 
 const roleLabels: Record<EnterpriseWorkspaceAccountDto['role'], string> = {
   owner: '企业所有者',
@@ -58,7 +61,22 @@ function permissionSummary(
   return item.permissions.map((permission) => names.get(permission) ?? permission)
 }
 
+function canConfigureAccount(
+  item: EnterpriseWorkspaceAccountDto,
+  scope: EnterpriseWorkspaceAccountScope,
+) {
+  if (item.role === 'owner') return false
+  if (scope === 'enterprise') return item.role === 'member'
+  return true
+}
+
 export function EnterpriseAccountsScreen() {
+  const params = useParams<{ workspaceId: string }>()
+  const { availableWorkspaces } = useManagement()
+  const workspace = availableWorkspaces.find((item) => item.id === params.workspaceId)
+  const scope: EnterpriseWorkspaceAccountScope =
+    workspace?.kind === 'enterprise' ? 'enterprise' : 'management'
+  const workspaceReady = Boolean(workspace)
   const [items, setItems] = useState<EnterpriseWorkspaceAccountDto[]>([])
   const [catalog, setCatalog] = useState<WorkspacePermissionCatalogDto | null>(null)
   const [total, setTotal] = useState(0)
@@ -74,12 +92,13 @@ export function EnterpriseAccountsScreen() {
   const size = 20
 
   const load = useCallback(async () => {
+    if (!workspaceReady) return
     setLoading(true)
     setError(null)
     try {
       const [accounts, permissionCatalog] = await Promise.all([
-        listEnterpriseWorkspaceAccounts({ keyword, page, size }),
-        getEnterpriseWorkspacePermissionCatalog(),
+        listEnterpriseWorkspaceAccounts({ keyword, page, size, scope }),
+        getEnterpriseWorkspacePermissionCatalog(scope),
       ])
       setItems(accounts.list)
       setTotal(accounts.total)
@@ -89,13 +108,17 @@ export function EnterpriseAccountsScreen() {
     } finally {
       setLoading(false)
     }
-  }, [keyword, page])
+  }, [keyword, page, scope, workspaceReady])
 
   useEffect(() => {
     void load()
   }, [load])
 
   function openEdit(item: EnterpriseWorkspaceAccountDto) {
+    if (!canConfigureAccount(item, scope)) {
+      toast.error(scope === 'enterprise' ? '只能配置本企业普通成员权限' : '企业所有者无需配置')
+      return
+    }
     setEditing(item)
     setSelected(item.permissions)
     setReason('')
@@ -127,6 +150,7 @@ export function EnterpriseAccountsScreen() {
         selected,
         editing.version,
         reason,
+        scope,
       )
       setItems((current) => current.map((item) => (
         item.membershipId === updated.membershipId ? updated : item
@@ -144,9 +168,13 @@ export function EnterpriseAccountsScreen() {
   return (
     <div>
       <PageHeading
-        eyebrow="系统"
-        title="企业账号权限"
-        description="企业账号来自已生效的企业成员关系；这里只配置工作台功能权限，不改变账号所属企业和成员角色。"
+        eyebrow={scope === 'enterprise' ? '企业工作台' : '系统'}
+        title={scope === 'enterprise' ? '账号权限' : '企业账号权限'}
+        description={
+          scope === 'enterprise'
+            ? '仅可配置本企业普通成员的工作台功能权限；所有者与管理员权限不可在此修改。'
+            : '企业账号来自已生效的企业成员关系；这里只配置工作台功能权限，不改变账号所属企业和成员角色。'
+        }
         icon={KeyRound}
       />
 
@@ -161,7 +189,7 @@ export function EnterpriseAccountsScreen() {
               setKeyword(keywordDraft.trim())
               if (keyword === keywordDraft.trim()) void load()
             }}
-            placeholder="搜索账号姓名或企业名称"
+            placeholder={scope === 'enterprise' ? '搜索账号姓名' : '搜索账号姓名或企业名称'}
           />
           <div className="flex gap-2">
             <Button
@@ -189,16 +217,23 @@ export function EnterpriseAccountsScreen() {
       {loading ? <QueueLoading /> : error ? (
         <QueueError error={error} onRetry={() => void load()} />
       ) : items.length === 0 ? (
-        <QueueEmpty title="没有可配置的企业账号" description="账号完成企业入驻、认领或加入后，会在这里显示。" />
+        <QueueEmpty
+          title="没有可配置的企业账号"
+          description={
+            scope === 'enterprise'
+              ? '本企业普通成员加入后，会在这里显示并可配置工作台权限。'
+              : '账号完成企业入驻、认领或加入后，会在这里显示。'
+          }
+        />
       ) : (
         <Card className="overflow-hidden">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <table className="min-w-[960px] w-full text-left">
+              <table className={`${scope === 'enterprise' ? 'min-w-[820px]' : 'min-w-[960px]'} w-full text-left`}>
                 <thead>
                   <tr className="border-b bg-muted/40 text-[11px] text-muted-foreground">
                     <th className="px-5 py-3 font-medium">账号</th>
-                    <th className="px-5 py-3 font-medium">所属企业</th>
+                    {scope === 'management' && <th className="px-5 py-3 font-medium">所属企业</th>}
                     <th className="px-5 py-3 font-medium">企业角色</th>
                     <th className="px-5 py-3 font-medium">工作台权限</th>
                     <th className="px-5 py-3 font-medium">状态</th>
@@ -210,7 +245,7 @@ export function EnterpriseAccountsScreen() {
                   {items.map((item) => (
                     <tr key={item.membershipId} className="text-sm transition-colors hover:bg-muted/20">
                       <td className="px-5 py-4 font-medium">{item.displayName}</td>
-                      <td className="px-5 py-4">{item.enterpriseName}</td>
+                      {scope === 'management' && <td className="px-5 py-4">{item.enterpriseName}</td>}
                       <td className="px-5 py-4">{roleLabels[item.role]}</td>
                       <td className="px-5 py-4">
                         <div className="flex max-w-[360px] flex-wrap gap-1.5">
@@ -222,8 +257,10 @@ export function EnterpriseAccountsScreen() {
                       <td className="px-5 py-4"><StatusBadge status={item.status} label={statusLabels[item.status]} /></td>
                       <td className="px-5 py-4 text-xs text-muted-foreground">{formatDateTime(item.updatedAt)}</td>
                       <td className="w-[120px] px-5 py-4 text-right">
-                        {item.role === 'owner' ? (
-                          <span className="text-xs text-muted-foreground">固定全部权限</span>
+                        {!canConfigureAccount(item, scope) ? (
+                          <span className="text-xs text-muted-foreground">
+                            {item.role === 'owner' ? '固定全部权限' : '不可配置'}
+                          </span>
                         ) : (
                           <Button size="sm" variant="ghost" onClick={() => openEdit(item)}>
                             <Pencil className="h-4 w-4" />配置
@@ -236,7 +273,7 @@ export function EnterpriseAccountsScreen() {
               </table>
             </div>
             <div className="flex items-center justify-between border-t px-5 py-3 text-xs text-muted-foreground">
-              <span>共 {total} 个企业账号，第 {page} / {Math.max(1, Math.ceil(total / size))} 页</span>
+              <span>共 {total} 个账号，第 {page} / {Math.max(1, Math.ceil(total / size))} 页</span>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>上一页</Button>
                 <Button size="sm" variant="outline" disabled={page * size >= total} onClick={() => setPage((value) => value + 1)}>下一页</Button>

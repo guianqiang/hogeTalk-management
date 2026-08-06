@@ -15,13 +15,19 @@ type Context = { params: Promise<{ path: string[] }> }
 
 async function proxy(request: NextRequest, context: Context) {
   const { path: segments } = await context.params
-  const path = segments.join('/')
-  if (request.method !== 'GET' && !validCsrf(request, request.cookies.get(CSRF_COOKIE)?.value)) {
+  const rawPath = segments.join('/')
+  const isPublicAuthPath = rawPath === 'auth/challenges'
+    || rawPath === 'v1/auth/challenges'
+    || rawPath === 'auth/enterprise-workspace/otp/login'
+    || rawPath === 'v1/auth/enterprise-workspace/otp/login'
+
+  const path = rawPath
+  if (!isPublicAuthPath && request.method !== 'GET' && !validCsrf(request, request.cookies.get(CSRF_COOKIE)?.value)) {
     return bffErrorResponse(403, 'E_PERMISSION', 'CSRF 校验失败', '请刷新页面后重试。')
   }
 
   const accessToken = request.cookies.get(ACCESS_COOKIE)?.value
-  if (!accessToken) {
+  if (!isPublicAuthPath && !accessToken) {
     return bffErrorResponse(401, 'E_AUTH_INVALID', '管理会话已失效', '请重新登录。')
   }
 

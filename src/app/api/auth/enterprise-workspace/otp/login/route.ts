@@ -7,28 +7,13 @@ import {
   setSessionCookies,
 } from '@/api/server/session'
 import { randomUuid } from '@/lib/random-id'
-import {
-  enterpriseWorkspaceAuthContextSchema,
-} from '@/api/client/enterprise-workspace'
+import { enterpriseSessionSchema } from '@/api/server/enterprise-session'
 
 export const dynamic = 'force-dynamic'
 
 const requestSchema = z.object({
   challenge_id: z.string().min(1),
   code: z.string().min(4).max(8),
-}).strict()
-
-const enterpriseSessionSchema = z.object({
-  access_token: z.string().min(1),
-  token_type: z.literal('Bearer'),
-  expires_in: z.number().int().positive(),
-  account: z.object({
-    id: z.string(),
-    status: z.enum(['active', 'suspended']),
-    display_name: z.string(),
-    created_at: z.string(),
-  }).strict(),
-  context: enterpriseWorkspaceAuthContextSchema,
 }).strict()
 
 export async function POST(request: Request) {

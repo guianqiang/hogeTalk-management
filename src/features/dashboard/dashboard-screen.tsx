@@ -155,7 +155,7 @@ export function DashboardScreen() {
         }
       />
 
-      <section className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgb(15_23_42/0.04),0_4px_12px_rgb(15_23_42/0.04)]">
         <div className="flex flex-col gap-5 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="mb-3 flex items-center gap-2">
@@ -189,7 +189,7 @@ export function DashboardScreen() {
             </div>
           )}
         </div>
-        <div className="grid gap-2 border-t border-border/60 px-5 py-3 text-xs sm:grid-cols-3 sm:px-6">
+        <div className="grid gap-2 border-t border-border px-5 py-3 text-xs sm:grid-cols-3 sm:px-6">
           <p><span className="text-muted-foreground">管理范围：</span>{isPlatform ? '华盟平台全局' : '当前商会'}</p>
           <p className="sm:text-center"><span className="text-muted-foreground">当前岗位：</span>{workspace.staffTitle}</p>
           <p className="sm:text-right"><span className="text-muted-foreground">数据刷新：</span>{snapshot?.updatedAt ? new Date(snapshot.updatedAt).toLocaleTimeString('zh-CN') : '按需加载'}</p>
@@ -216,8 +216,8 @@ export function DashboardScreen() {
               </Card>
             ))}
           </section>
-          <section className="mt-4 overflow-hidden rounded-xl border border-border/70 bg-card">
-            <div className="flex flex-col gap-2 border-b border-border/60 px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+          <section className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgb(15_23_42/0.04),0_4px_12px_rgb(15_23_42/0.04)]">
+            <div className="flex flex-col gap-2 border-b border-border px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
               <div>
                 <p className="text-[11px] font-semibold tracking-[0.08em] text-ember-700">{platformHeading.eyebrow}</p>
                 <h2 className="mt-1 text-base font-semibold">{platformHeading.sectionTitle}</h2>
@@ -242,7 +242,7 @@ export function DashboardScreen() {
                   <Link
                     key={href}
                     href={`/w/${workspace.id}${href}`}
-                    className="group relative min-h-32 overflow-hidden rounded-lg border border-border/75 bg-background px-3 py-3 transition-[border-color,box-shadow,transform,background-color] duration-200 hover:-translate-y-0.5 hover:border-ember-200 hover:bg-ember-50/20 hover:shadow-[0_10px_24px_rgb(31_32_38/0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 sm:min-h-36 sm:px-4 sm:py-4"
+                    className="group relative min-h-32 overflow-hidden rounded-lg border border-border bg-background px-3 py-3 transition-[border-color,box-shadow,transform,background-color] duration-200 hover:-translate-y-0.5 hover:border-ember-200 hover:bg-ember-50/20 hover:shadow-[0_10px_24px_rgb(31_32_38/0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 sm:min-h-36 sm:px-4 sm:py-4"
                   >
                     <span className="flex items-start justify-between gap-3">
                       <span className={`grid h-9 w-9 place-items-center rounded-lg border ${accent}`}>

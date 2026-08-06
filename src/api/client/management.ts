@@ -342,6 +342,7 @@ export async function listCurrentChamberEnterprises() {
 export function listPlatformEnterprises(input: {
   keyword?: string
   status?: 'enabled' | 'disabled'
+  auditStatus?: 'pending' | 'approved' | 'rejected'
   page?: number
   size?: number
 } = {}) {
@@ -349,10 +350,34 @@ export function listPlatformEnterprises(input: {
     `management/enterprises${queryString({
       keyword: input.keyword?.trim(),
       status: input.status,
+      audit_status: input.auditStatus,
       page: input.page ?? 1,
       size: input.size ?? 20,
     })}`,
     currentChamberEnterprisePageSchema,
+  )
+}
+
+export function auditPlatformEnterprise(
+  enterpriseId: string,
+  input: {
+    approved: boolean
+    remark?: string | null
+    expectedVersion: number
+  },
+) {
+  return request(
+    `management/enterprises/${encodeURIComponent(enterpriseId)}/audit`,
+    currentChamberEnterpriseSchema,
+    {
+      method: 'POST',
+      idempotencyKey: newIdempotencyKey(),
+      body: {
+        approved: input.approved,
+        remark: input.remark?.trim() || null,
+        expected_version: input.expectedVersion,
+      },
+    },
   )
 }
 

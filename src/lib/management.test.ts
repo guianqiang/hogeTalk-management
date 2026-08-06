@@ -51,6 +51,22 @@ describe('frozen management contract projection', () => {
           country_code: null,
           valid_from: '2026-08-03T02:30:00Z',
           valid_to: null,
+        }, {
+          reviewer_grant_id: '342583346817138704',
+          action: 'content.news.manage',
+          scope_type: 'platform',
+          scope_id: 'hm',
+          country_code: null,
+          valid_from: '2026-08-03T02:30:00Z',
+          valid_to: null,
+        }, {
+          reviewer_grant_id: '342583346817138705',
+          action: 'product.tour.curate',
+          scope_type: 'platform',
+          scope_id: 'hm',
+          country_code: null,
+          valid_from: '2026-08-03T02:30:00Z',
+          valid_to: null,
         }],
         menu_keys: ['dashboard', 'chamber_management'],
         must_change_password: false,
@@ -65,6 +81,8 @@ describe('frozen management contract projection', () => {
 
     expect(result.list[0]?.grants).toEqual([
       expect.objectContaining({ action: 'chamber.manage', scope_type: 'chamber' }),
+      expect.objectContaining({ action: 'content.news.manage', scope_type: 'platform' }),
+      expect.objectContaining({ action: 'product.tour.curate', scope_type: 'platform' }),
     ])
   })
 
@@ -143,7 +161,8 @@ describe('frozen management contract projection', () => {
     expect(labels).toContain('运营概览')
     expect(labels).toContain('首页管理')
     expect(labels).toContain('企业管理')
-    expect(labels).toContain('供需审核')
+    expect(labels).not.toContain('供需审核')
+    expect(labels).toContain('入驻审核')
     expect(labels).toContain('平台认证')
     expect(labels).toContain('认领审核')
     expect(labels).toContain('后台人员')
@@ -193,7 +212,7 @@ describe('frozen management contract projection', () => {
     expect(contentWorkspace.staffTitle).toBe('内容运营')
     expect(contentLabels).toContain('首页管理')
     expect(contentLabels).toContain('近期活动')
-    expect(contentLabels).toContain('供需审核')
+    expect(contentLabels).not.toContain('供需审核')
     expect(contentLabels).not.toContain('业务通知')
     expect(contentLabels).toContain('操作审计')
     expect(contentLabels).not.toContain('企业管理')

@@ -3,7 +3,12 @@
 import { z } from 'zod'
 import { randomUuid } from '@/lib/random-id'
 import { ManagementApiError, request } from './management'
-import { errorEnvelopeSchema } from '@/api/generated/huameng'
+import { currentChamberEnterpriseSchema, errorEnvelopeSchema } from '@/api/generated/huameng'
+import {
+  verificationApplicationSchema,
+  verificationLevelSchema,
+  type VerificationLevelDto,
+} from '@/api/generated/huameng-platform'
 
 export const workspacePermissionSchema = z.enum([
   'enterprise_workspace.access',
@@ -80,8 +85,8 @@ export const enterpriseAccountSchema = z.object({
   updated_at: z.string(),
 }).strict()
 
-const enterpriseAuthChallengeSchema = z.object({
-  id: z.string(),
+export const enterpriseAuthChallengeSchema = z.object({
+  id: z.union([z.string(), z.number().int().positive()]).transform((value) => String(value)),
   purpose: z.enum(['login', 'password_reset', 'bind_phone']),
   masked_destination: z.string(),
   expires_at: z.string(),
@@ -109,6 +114,8 @@ export const enterpriseWorkspaceSchema = z.object({
       logo: z.record(z.unknown()).nullable(),
       verificationStatus: z.string(),
       onboardingStatus: z.string(),
+      platformLevel: z.number().int().nonnegative(),
+      platformLevelExpireAt: z.string().nullable(),
     }).strict(),
     z.null(),
   ]),
@@ -116,24 +123,11 @@ export const enterpriseWorkspaceSchema = z.object({
   hasAiCard: z.boolean(),
 }).strict()
 
-export const enterpriseWorkspacePersonalSchema = z.object({
-  type: z.literal('personal'),
-  account_id: z.string(),
-}).strict()
-
-export const enterpriseWorkspaceEnterpriseSchema = z.object({
-  type: z.literal('enterprise'),
-  account_id: z.string(),
-  enterprise_id: z.string(),
-  membership_id: z.string(),
-  role: z.enum(['owner', 'admin', 'member']),
-  clearances: z.array(z.string()),
-}).strict()
-
-export const enterpriseWorkspaceAuthContextSchema = z.union([
+export {
   enterpriseWorkspacePersonalSchema,
   enterpriseWorkspaceEnterpriseSchema,
-])
+  enterpriseWorkspaceAuthContextSchema,
+} from '@/api/server/enterprise-session'
 
 export const supplyDemandSchema = z.object({
   id: z.string(),
@@ -281,7 +275,7 @@ export function loginEnterpriseWorkspace(
   countryCode: string,
   password: string,
 ) {
-  return request('auth/enterprise-workspace/password/login', enterpriseLoginSchema, {
+  return request('v1/auth/enterprise-workspace/password/login', enterpriseLoginSchema, {
     method: 'POST',
     body: {
       identifier: identifier.trim(),
@@ -295,14 +289,28 @@ export function getEnterpriseWorkspace() {
   return request('enterprise/workspace', enterpriseWorkspaceSchema)
 }
 
-export function getEnterpriseWorkspacePermissionCatalog() {
-  return request('management/enterprise-workspace/permissions', workspacePermissionCatalogSchema)
+export type EnterpriseWorkspaceAccountScope = 'management' | 'enterprise'
+
+function workspaceAccountsBasePath(scope: EnterpriseWorkspaceAccountScope) {
+  return scope === 'enterprise'
+    ? 'enterprise/workspace'
+    : 'management/enterprise-workspace'
+}
+
+export function getEnterpriseWorkspacePermissionCatalog(
+  scope: EnterpriseWorkspaceAccountScope = 'management',
+) {
+  return request(
+    `${workspaceAccountsBasePath(scope)}/permissions`,
+    workspacePermissionCatalogSchema,
+  )
 }
 
 export function listEnterpriseWorkspaceAccounts(input: {
   keyword?: string
   page?: number
   size?: number
+  scope?: EnterpriseWorkspaceAccountScope
 } = {}) {
   const query = new URLSearchParams({
     page: String(input.page ?? 1),
@@ -310,7 +318,7 @@ export function listEnterpriseWorkspaceAccounts(input: {
   })
   if (input.keyword?.trim()) query.set('keyword', input.keyword.trim())
   return request(
-    `management/enterprise-workspace/accounts?${query.toString()}`,
+    `${workspaceAccountsBasePath(input.scope ?? 'management')}/accounts?${query.toString()}`,
     enterpriseWorkspaceAccountPageSchema,
   )
 }
@@ -320,9 +328,10 @@ export function updateEnterpriseWorkspacePermissions(
   permissions: WorkspacePermission[],
   expectedVersion: number,
   reason: string,
+  scope: EnterpriseWorkspaceAccountScope = 'management',
 ) {
   return request(
-    `management/enterprise-workspace/memberships/${encodeURIComponent(membershipId)}/action`,
+    `${workspaceAccountsBasePath(scope)}/memberships/${encodeURIComponent(membershipId)}/action`,
     enterpriseWorkspaceAccountSchema,
     {
       method: 'POST',
@@ -366,7 +375,7 @@ export function createEnterpriseAuthChallenge(
   phone: string,
   purpose: 'password_reset' | 'bind_phone' = 'password_reset',
 ) {
-  return request('auth/challenges', enterpriseAuthChallengeSchema, {
+  return request('v1/auth/challenges', enterpriseAuthChallengeSchema, {
     method: 'POST',
     body: {
       purpose,
@@ -379,7 +388,7 @@ export function createEnterpriseAuthChallenge(
 }
 
 export function createEnterpriseWorkspaceLoginChallenge(phone: string) {
-  return request('auth/challenge', enterpriseAuthChallengeSchema, {
+  return request('v1/auth/challenges', enterpriseAuthChallengeSchema, {
     method: 'POST',
     body: {
       purpose: 'login',
@@ -392,7 +401,7 @@ export function createEnterpriseWorkspaceLoginChallenge(phone: string) {
 }
 
 export function loginEnterpriseWorkspaceWithOtp(challengeId: string, code: string) {
-  return request('auth/enterprise-workspace/otp/login', enterpriseLoginSchema, {
+  return request('v1/auth/enterprise-workspace/otp/login', enterpriseLoginSchema, {
     method: 'POST',
     body: {
       challenge_id: challengeId,
@@ -551,6 +560,189 @@ export function saveEnterpriseAiCard(body: AiCardWriteInput) {
   })
 }
 
+const enterpriseOnboardingResultSchema = z.object({
+  enterprise: z.object({
+    id: z.string(),
+    legal_name: z.string(),
+    display_name: z.string(),
+    country_code: z.string(),
+    type: z.enum(['company', 'chamber', 'platform', 'other']),
+    lifecycle_status: z.string(),
+    verification_status: z.string(),
+    ownership_status: z.string(),
+    directory_visibility: z.string(),
+    registration_identifiers: z.array(z.unknown()).nullable().optional(),
+    contacts: z.array(z.unknown()).nullable().optional(),
+    created_at: z.string(),
+  }).strict(),
+  membership: z.object({
+    id: z.string(),
+    enterprise_id: z.string(),
+    account_id: z.string(),
+    role: z.enum(['owner', 'admin', 'member']),
+    clearances: z.array(z.string()),
+    status: z.string(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  }).strict(),
+}).strict()
+
+export type EnterpriseProfileDto = z.output<typeof currentChamberEnterpriseSchema>
+
+export type EnterpriseSelfProfileInput = {
+  name: string
+  description?: string | null
+  main_business?: string | null
+  address?: string | null
+  contact_phone?: string | null
+  contact_email?: string | null
+  contact_name?: string | null
+  legal_person?: string | null
+  declared_credit_code?: string | null
+}
+
+export function createEnterprise(input: {
+  legalName: string
+  displayName?: string | null
+  countryCode: string
+}) {
+  return request('enterprises', enterpriseOnboardingResultSchema, {
+    method: 'POST',
+    idempotencyKey: idempotencyKey(),
+    body: {
+      legal_name: input.legalName.trim(),
+      display_name: input.displayName?.trim() || null,
+      country_code: input.countryCode,
+      type: 'company',
+    },
+  })
+}
+
+export function getEnterpriseProfile() {
+  return request('enterprise', currentChamberEnterpriseSchema)
+}
+
+export function applyEnterpriseDirectory(body: EnterpriseSelfProfileInput) {
+  return request('enterprise/directory-application', currentChamberEnterpriseSchema, {
+    method: 'POST',
+    idempotencyKey: idempotencyKey(),
+    body,
+  })
+}
+
+export function updateEnterpriseSelfProfile(
+  expectedVersion: number,
+  body: EnterpriseSelfProfileInput,
+) {
+  const query = new URLSearchParams({ expected_version: String(expectedVersion) })
+  return request(`enterprise?${query.toString()}`, currentChamberEnterpriseSchema, {
+    method: 'PUT',
+    idempotencyKey: idempotencyKey(),
+    body,
+  })
+}
+
+export function resubmitEnterpriseDirectory(expectedVersion: number) {
+  return request('enterprise/directory-resubmit', currentChamberEnterpriseSchema, {
+    method: 'POST',
+    idempotencyKey: idempotencyKey(),
+    body: { expected_version: expectedVersion },
+  })
+}
+
+export type EnterpriseVerificationApplicationDto = z.output<typeof verificationApplicationSchema>
+
+export async function getCurrentEnterpriseVerification(enterpriseId: string) {
+  try {
+    return await request(
+      `enterprises/${encodeURIComponent(enterpriseId)}/verification-applications/current`,
+      verificationApplicationSchema,
+    )
+  } catch (error) {
+    if (error instanceof ManagementApiError && (error.status === 404 || error.code === 'E_SCOPE_DENIED')) {
+      return null
+    }
+    throw error
+  }
+}
+
+export function submitEnterpriseVerification(
+  enterpriseId: string,
+  input: {
+    requestedLevel: VerificationLevelDto
+    statement?: string | null
+    evidence: Array<{
+      type: 'registration_document' | 'authorization_letter' | 'financial_document' | 'operation_document' | 'other'
+      objectKey: string
+      sha256: string
+      note?: string | null
+    }>
+  },
+) {
+  return request(
+    `enterprises/${encodeURIComponent(enterpriseId)}/verification-applications`,
+    verificationApplicationSchema,
+    {
+      method: 'POST',
+      idempotencyKey: idempotencyKey(),
+      body: {
+        requested_level: input.requestedLevel,
+        statement: input.statement?.trim() || null,
+        evidence: input.evidence.map((item) => ({
+          type: item.type,
+          object_key: item.objectKey,
+          sha256: item.sha256,
+          note: item.note?.trim() || null,
+        })),
+      },
+    },
+  )
+}
+
+export function resubmitEnterpriseVerification(
+  applicationId: string,
+  input: {
+    requestedLevel: VerificationLevelDto
+    statement?: string | null
+    evidence: Array<{
+      type: 'registration_document' | 'authorization_letter' | 'financial_document' | 'operation_document' | 'other'
+      objectKey: string
+      sha256: string
+      note?: string | null
+    }>
+  },
+) {
+  return request(
+    `verification-applications/${encodeURIComponent(applicationId)}/resubmit`,
+    verificationApplicationSchema,
+    {
+      method: 'POST',
+      idempotencyKey: idempotencyKey(),
+      body: {
+        requested_level: input.requestedLevel,
+        statement: input.statement?.trim() || null,
+        evidence: input.evidence.map((item) => ({
+          type: item.type,
+          object_key: item.objectKey,
+          sha256: item.sha256,
+          note: item.note?.trim() || null,
+        })),
+      },
+    },
+  )
+}
+
+export function cancelEnterpriseVerification(applicationId: string) {
+  return request(
+    `verification-applications/${encodeURIComponent(applicationId)}/cancel`,
+    verificationApplicationSchema,
+    {
+      method: 'POST',
+      idempotencyKey: idempotencyKey(),
+    },
+  )
+}
+
 export async function uploadEnterpriseImage(
   file: File,
   purpose: 'profile' | 'enterprise',
@@ -582,6 +774,8 @@ export async function uploadEnterpriseImage(
   const parsed = z.object({
     id: z.string(),
     media_url: z.string(),
+    object_key: z.string().nullable().optional(),
+    sha256: z.string(),
     access_url: z.string().nullable(),
   }).passthrough().safeParse(payload)
   if (!parsed.success) {
@@ -589,3 +783,5 @@ export async function uploadEnterpriseImage(
   }
   return parsed.data
 }
+
+export { verificationLevelSchema }

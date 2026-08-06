@@ -1,6 +1,5 @@
 import {
   BarChart3,
-  BriefcaseBusiness,
   Building2,
   CheckCircle2,
   LockKeyhole,
@@ -42,7 +41,7 @@ export function AdminLoginScreen() {
               受保护的管理入口
               <span className="h-px w-10 bg-border" />
             </div>
-            <div className="product-surface bg-card/95 p-6 sm:p-9">
+            <div className="product-surface bg-card p-6 sm:p-9">
               <LoginScreen
                 portal="admin"
                 eyebrow="平台管理员"
@@ -204,58 +203,35 @@ export function ChamberLoginScreen() {
 
 export function EnterpriseLoginScreen() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-paper-100 text-foreground">
-      <div className="absolute inset-0 bg-[radial-gradient(760px_460px_at_12%_18%,rgba(234,88,12,0.08),transparent_65%),linear-gradient(rgba(31,32,38,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(31,32,38,0.025)_1px,transparent_1px)] bg-[size:auto,72px_72px,72px_72px]" />
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1280px] flex-col px-5 py-7 sm:px-10 lg:px-14 lg:py-10">
-        <header className="flex items-center justify-between border-b border-border/75 pb-5">
-          <div>
-            <p className="font-display text-[1.4rem] tracking-[-0.03em]">
+    <main className="relative min-h-screen overflow-hidden bg-background">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(31,32,38,0.028)_1px,transparent_1px),linear-gradient(90deg,rgba(31,32,38,0.028)_1px,transparent_1px)] bg-[size:64px_64px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(720px_420px_at_50%_18%,rgba(234,88,12,0.08),transparent_62%)]" />
+      <div className="absolute left-1/2 top-0 h-44 w-px -translate-x-1/2 bg-gradient-to-b from-ember-500/60 to-transparent" />
+
+      <section className="relative mx-auto flex min-h-screen w-full max-w-[1280px] items-center justify-center px-5 py-12 sm:px-10">
+        <div className="w-full max-w-[420px] animate-fade-up">
+          <div className="mb-8 text-center">
+            <p className="font-display text-[1.55rem] tracking-[-0.03em]">
               华盟<span className="text-ember-700">在线</span>
             </p>
-            <p className="mt-1 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground">
+            <p className="mt-1.5 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground">
               ENTERPRISE WORKSPACE
             </p>
           </div>
-          <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-            <BriefcaseBusiness className="h-4 w-4 text-ember-700" />
-            企业业务入口
-          </div>
-        </header>
 
-        <section className="flex flex-1 items-center justify-center py-12">
-          <div className="grid w-full max-w-[920px] overflow-hidden rounded-xl border border-border/80 bg-card shadow-[0_24px_70px_rgba(31,32,38,0.1)] lg:grid-cols-[minmax(0,1fr)_450px]">
-            <aside className="hidden bg-foreground p-10 text-paper-50 lg:flex lg:flex-col lg:justify-between">
-              <div>
-                <BriefcaseBusiness className="h-7 w-7 text-ember-400" />
-                <h2 className="mt-8 font-display text-[38px] font-semibold tracking-[-0.035em] text-white">
-                  企业工作台
-                </h2>
-                <p className="mt-4 text-sm leading-7 text-paper-300">
-                  集中管理企业供需、合作咨询与对外 AI 名片，账号权限由平台统一配置。
-                </p>
-              </div>
-              <p className="border-t border-white/15 pt-6 text-[11px] leading-6 text-paper-400">
-                一个账号对应一个企业，登录后直接进入已授权的企业工作台。
-              </p>
-            </aside>
-            <div className="p-6 sm:p-9 lg:p-10">
-              <LoginScreen
-                portal="enterprise"
-                eyebrow="企业账号"
-                title="登录企业工作台"
-                description="使用平台已开通的企业账号或已验证手机号登录。"
-                submitLabel="进入企业工作台"
-                allowOtp
-              />
-            </div>
+          <div className="product-surface bg-card p-6 sm:p-8">
+            <LoginScreen
+              portal="enterprise"
+              eyebrow="企业账号"
+              title="登录"
+              description=""
+              submitLabel="进入企业工作台"
+              allowOtp
+              density="compact"
+            />
           </div>
-        </section>
-
-        <footer className="flex items-center justify-between border-t border-border/75 pt-5 text-[10px] tracking-[0.1em] text-muted-foreground">
-          <span>HogeTalk · 华盟</span>
-          <span>企业数据安全受权限范围保护</span>
-        </footer>
-      </div>
+        </div>
+      </section>
     </main>
   )
 }

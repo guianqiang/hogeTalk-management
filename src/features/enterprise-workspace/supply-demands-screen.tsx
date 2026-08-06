@@ -15,6 +15,7 @@ import {
   type SupplyDemandConsultationDto,
   type SupplyDemandWriteInput,
 } from '@/api/client/enterprise-workspace'
+import { DateTimeField } from '@/components/management/date-time-field'
 import { PageHeading } from '@/components/management/page-heading'
 import { StatusBadge } from '@/components/management/status-badge'
 import { Button } from '@/components/ui/button'
@@ -182,7 +183,7 @@ export function SupplyDemandsScreen() {
   async function act(item: SupplyDemandDto, action: 'submit' | 'withdraw') {
     try {
       await actEnterpriseSupplyDemand(item.id, action, item.version)
-      toast.success(action === 'submit' ? '已提交平台审核' : '供需信息已撤回')
+      toast.success(action === 'submit' ? '供需信息已发布' : '供需信息已撤回')
       await load()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '操作失败')
@@ -207,7 +208,7 @@ export function SupplyDemandsScreen() {
       <PageHeading
         eyebrow="企业业务"
         title="供需"
-        description="创建企业供给或需求，提交平台审核后在网站端公开展示。"
+        description="创建企业供给或需求，发布后即可在网站端公开展示。"
         icon={PackageSearch}
         action={canManage ? (
           <Button onClick={openCreate}>
@@ -223,7 +224,7 @@ export function SupplyDemandsScreen() {
       ) : null}
 
       <form
-        className="rounded-xl border border-border/70 bg-card p-4"
+        className="rounded-xl border border-border bg-card shadow-[0_1px_2px_rgb(15_23_42/0.04),0_4px_12px_rgb(15_23_42/0.04)] p-4"
         onSubmit={(event) => {
           event.preventDefault()
           setPage(1)
@@ -269,7 +270,7 @@ export function SupplyDemandsScreen() {
         </div>
       </form>
 
-      <section className="mt-4 overflow-hidden rounded-xl border border-border/70 bg-card">
+      <section className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgb(15_23_42/0.04),0_4px_12px_rgb(15_23_42/0.04)]">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[920px] text-left text-sm">
             <thead className="border-b bg-muted/25 text-xs text-muted-foreground">
@@ -305,7 +306,7 @@ export function SupplyDemandsScreen() {
                           <Button size="sm" variant="outline" onClick={() => openEdit(item)}><Edit3 className="h-3.5 w-3.5" />编辑</Button>
                         ) : null}
                         {['draft', 'rejected', 'withdrawn'].includes(item.status) ? (
-                          <Button size="sm" onClick={() => void act(item, 'submit')}><Send className="h-3.5 w-3.5" />提交</Button>
+                          <Button size="sm" onClick={() => void act(item, 'submit')}><Send className="h-3.5 w-3.5" />发布</Button>
                         ) : null}
                         {['pending', 'published'].includes(item.status) ? (
                           <Button size="sm" variant="outline" onClick={() => void act(item, 'withdraw')}><Undo2 className="h-3.5 w-3.5" />撤回</Button>
@@ -329,7 +330,7 @@ export function SupplyDemandsScreen() {
       </section>
 
       {canManageConsultations ? (
-        <section className="mt-4 overflow-hidden rounded-xl border border-border/70 bg-card">
+        <section className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgb(15_23_42/0.04),0_4px_12px_rgb(15_23_42/0.04)]">
           <div className="flex items-center justify-between border-b px-5 py-4">
             <div>
               <h2 className="flex items-center gap-2 font-display text-base font-semibold">
@@ -387,7 +388,7 @@ export function SupplyDemandsScreen() {
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing ? '编辑供需' : '新建供需'}</DialogTitle>
-            <DialogDescription>保存后为草稿，确认内容无误后再提交平台审核。</DialogDescription>
+            <DialogDescription>保存后为草稿，确认内容无误后再发布。</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div className="space-y-2"><Label>类型</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.type} onChange={(event) => setForm((value) => ({ ...value, type: event.target.value as SupplyDemandWriteInput['type'] }))}><option value="demand">需求</option><option value="supply">供给</option></select></div>
@@ -396,7 +397,20 @@ export function SupplyDemandsScreen() {
             <div className="space-y-2 sm:col-span-2"><Label>详细说明</Label><Textarea className="min-h-32" value={form.description} maxLength={10000} onChange={(event) => setForm((value) => ({ ...value, description: event.target.value }))} /></div>
             <div className="space-y-2"><Label>联系人</Label><Input value={form.contactName} onChange={(event) => setForm((value) => ({ ...value, contactName: event.target.value }))} /></div>
             <div className="space-y-2"><Label>联系电话</Label><Input type="tel" value={form.contactPhone} onChange={(event) => setForm((value) => ({ ...value, contactPhone: event.target.value }))} /></div>
-            <div className="space-y-2"><Label>有效期至</Label><Input type="date" value={form.expiresAt?.slice(0, 10) ?? ''} onChange={(event) => setForm((value) => ({ ...value, expiresAt: event.target.value ? `${event.target.value}T23:59:59+08:00` : null }))} /></div>
+            <div className="space-y-2">
+              <Label htmlFor="supply-demand-expires-at">有效期至</Label>
+              <DateTimeField
+                id="supply-demand-expires-at"
+                type="date"
+                value={form.expiresAt?.slice(0, 10) ?? ''}
+                onValueChange={(value) => setForm((current) => ({
+                  ...current,
+                  expiresAt: value ? `${value}T23:59:59+08:00` : null,
+                }))}
+                placeholder="可不填，表示长期有效"
+              />
+              <p className="text-xs text-muted-foreground">留空表示长期有效。</p>
+            </div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>取消</Button><Button disabled={saving} onClick={() => void save()}>{saving ? '正在保存…' : '保存草稿'}</Button></DialogFooter>
         </DialogContent>

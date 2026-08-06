@@ -13,6 +13,7 @@ export type WorkspaceMenuKey =
   | 'enterprise_workspace'
   | 'supply_demand'
   | 'ai_card'
+  | 'account_permissions'
 
 export interface Workspace {
   id: string

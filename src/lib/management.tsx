@@ -76,6 +76,7 @@ interface ManagementContextValue {
   switchWorkspace: (workspaceId: string) => Promise<void>
   refreshAccount: () => Promise<void>
   refreshWorkspace: (workspaceId: string) => Promise<void>
+  bootstrap: (domain?: 'management' | 'enterprise') => Promise<{ workspaces: Workspace[] }>
   createEnterpriseImport: (workspaceId: string, input: CreateEnterpriseImportInput) => Promise<ImportJob>
   refreshImportJob: (workspaceId: string, jobId: string) => Promise<ImportJob>
 }
@@ -110,7 +111,16 @@ function enterpriseWorkspace(dto: EnterpriseWorkspaceDto): Workspace {
   if (dto.permissions.includes('enterprise_workspace.access')) menuKeys.push('enterprise_workspace')
   if (dto.permissions.includes('supply_demand.read')) menuKeys.push('supply_demand')
   if (dto.permissions.includes('ai_card.read')) menuKeys.push('ai_card')
+  if (
+    dto.enterprise !== null
+    && (dto.role === 'owner' || dto.role === 'admin')
+    && dto.permissions.includes('enterprise_workspace.access')
+  ) {
+    menuKeys.push('account_permissions')
+  }
   if (dto.enterprise === null) {
+    // 未入驻账号没有任何 clearances，但必须能访问工作台首页和企业信息页发起入驻申请。
+    if (!menuKeys.includes('enterprise_workspace')) menuKeys.push('enterprise_workspace')
     return {
       id: `enterprise-${dto.accountId}`,
       name: '企业工作台',
@@ -381,10 +391,12 @@ export function ManagementProvider({ children }: { children: React.ReactNode }) 
     switchWorkspace,
     refreshAccount,
     refreshWorkspace,
+    bootstrap,
     createEnterpriseImport,
     refreshImportJob,
   }), [
     availableWorkspaces,
+    bootstrap,
     createEnterpriseImport,
     currentUser,
     hydrated,

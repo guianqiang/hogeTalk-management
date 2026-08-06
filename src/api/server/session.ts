@@ -23,8 +23,21 @@ function apiBaseUrl() {
   return url.toString().replace(/\/+$/, '')
 }
 
+function appendApiPath(baseUrl: string, path: string) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const base = new URL(baseUrl)
+  const basePath = base.pathname.replace(/\/+$/, '')
+
+  if (basePath === '/v1' && normalizedPath.startsWith('/v1/')) {
+    return `${base.origin}${basePath}${normalizedPath.slice(3)}`
+  }
+
+  return `${base.origin}${basePath}${normalizedPath}`
+}
+
 export function callManagementBackend(path: string, init: RequestInit) {
-  return fetch(`${apiBaseUrl()}${path}`, {
+  const target = appendApiPath(apiBaseUrl(), path)
+  return fetch(target, {
     ...init,
     cache: 'no-store',
     signal: AbortSignal.timeout(30_000),

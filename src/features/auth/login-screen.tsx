@@ -32,6 +32,9 @@ interface LoginScreenProps {
   submitLabel: string
   allowOtp?: boolean
   className?: string
+  formStyle?: 'default' | 'enterprise'
+  /** Compact enterprise desk login: title + fields + text-link mode switch. */
+  density?: 'default' | 'compact'
 }
 
 export function LoginScreen({
@@ -42,6 +45,8 @@ export function LoginScreen({
   submitLabel,
   allowOtp = false,
   className,
+  formStyle = 'default',
+  density = 'default',
 }: LoginScreenProps) {
   const router = useRouter()
   const {
@@ -69,6 +74,18 @@ export function LoginScreen({
   const passwordId = `${portal}-password`
   const newPasswordId = `${portal}-new-password`
   const codeId = `${portal}-otp-code`
+  const isEnterprise = formStyle === 'enterprise'
+  const isCompact = density === 'compact'
+
+  const panelClasses = isEnterprise
+    ? 'rounded-xl border border-slate-200 bg-white p-4 shadow-sm'
+    : 'rounded-xl border border-border/75 bg-card/40 p-4 backdrop-blur-sm'
+  const buttonClasses = isEnterprise && !isCompact
+    ? 'h-11 w-full bg-foreground text-white shadow-sm hover:bg-foreground/90'
+    : 'h-11 min-h-11 w-full bg-ember-700 text-white hover:bg-ember-800 focus-visible:ring-ember-700'
+  const inputClasses = isEnterprise && !isCompact
+    ? 'h-11 font-data focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20'
+    : 'h-11 font-data focus-visible:border-ember-500 focus-visible:ring-ember-500/20'
 
   useEffect(() => {
     if (!hydrated || !currentUser || !availableWorkspaces.length) return
@@ -177,20 +194,28 @@ export function LoginScreen({
 
   return (
     <div className={cn('w-full', className)}>
-      <div className="mb-7 border-b border-border/70 pb-6">
-        <div className={cn(
-          'mb-4 inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.06em]',
-          'border-ember-200 bg-ember-50 text-ember-800',
-        )}>
-          {eyebrow}
+      {isCompact ? (
+        <div className="mb-6">
+          <h1 className="font-display text-[28px] font-semibold tracking-[-0.03em] text-foreground">
+            {title}
+          </h1>
         </div>
-        <h1 className="font-display text-[32px] font-semibold leading-tight tracking-[-0.025em] text-foreground sm:text-[36px]">
-          {title}
-        </h1>
-        <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-          {description}
-        </p>
-      </div>
+      ) : (
+        <div className={cn('mb-7', isEnterprise ? 'space-y-3' : 'border-b border-border/70 pb-6')}>
+          <div className={cn(
+            'mb-4 inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.06em]',
+            isEnterprise ? 'border-foreground/20 bg-slate-100 text-slate-700' : 'border-ember-200 bg-ember-50 text-ember-800',
+          )}>
+            {eyebrow}
+          </div>
+          <h1 className="font-display text-[30px] font-semibold leading-tight tracking-[-0.025em] text-foreground sm:text-[34px]">
+            {title}
+          </h1>
+          <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
+            {description}
+          </p>
+        </div>
+      )}
 
       {passwordChangeToken ? (
         <form onSubmit={changeInitialPassword} className="space-y-5">
@@ -263,16 +288,23 @@ export function LoginScreen({
           </Button>
         </form>
       ) : (
-      <form onSubmit={submit} className="space-y-6">
-        {allowOtp && (
-          <div className="inline-flex rounded-full border border-border/80 bg-card/70 p-1 text-xs font-semibold tracking-[0.1em]">
+        <form onSubmit={submit} className={cn(isCompact ? 'space-y-5' : 'space-y-6')}>
+        {allowOtp && !isCompact ? (
+          <div className={cn(
+            'inline-flex rounded-full border p-1 text-xs font-semibold tracking-[0.1em]',
+            isEnterprise
+              ? 'border-slate-200 bg-slate-100'
+              : 'border-border/80 bg-card/70',
+          )}>
             <button
               type="button"
               className={cn(
                 'rounded-full px-4 py-2 transition',
                 mode === 'password'
                   ? 'bg-foreground text-background shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
+                  : isEnterprise
+                    ? 'text-slate-500 hover:text-slate-700'
+                    : 'text-muted-foreground hover:text-foreground',
               )}
               onClick={() => switchMode('password')}
               aria-pressed={mode === 'password'}
@@ -285,7 +317,9 @@ export function LoginScreen({
                 'rounded-full px-4 py-2 transition',
                 mode === 'otp'
                   ? 'bg-foreground text-background shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
+                  : isEnterprise
+                    ? 'text-slate-500 hover:text-slate-700'
+                    : 'text-muted-foreground hover:text-foreground',
               )}
               onClick={() => switchMode('otp')}
               aria-pressed={mode === 'otp'}
@@ -293,105 +327,129 @@ export function LoginScreen({
               验证码登录
             </button>
           </div>
-        )}
-        <div className="space-y-2 rounded-xl border border-border/75 bg-card/40 p-4 backdrop-blur-sm">
-          <div className="mb-1 flex items-center gap-2 text-xs font-semibold tracking-[0.12em] text-muted-foreground">
-            {mode === 'otp'
-              ? <Smartphone className="h-3.5 w-3.5 text-ember-700" />
-              : <UserRound className="h-3.5 w-3.5 text-ember-700" />}
-            <span>{mode === 'otp' ? '短信快捷登录' : '账号密码登录'}</span>
+        ) : null}
+
+        <div className={cn(
+          'space-y-4',
+          !isCompact && (isEnterprise ? 'rounded-xl border border-slate-200 bg-white p-4 shadow-sm' : panelClasses),
+        )}>
+          {!isCompact ? (
+            <div className="mb-1 flex items-center gap-2 text-xs font-semibold tracking-[0.12em] text-muted-foreground">
+              {mode === 'otp'
+                ? <Smartphone className="h-3.5 w-3.5 text-ember-700" />
+                : <UserRound className="h-3.5 w-3.5 text-ember-700" />}
+              <span>{mode === 'otp' ? '短信快捷登录' : '账号密码登录'}</span>
+            </div>
+          ) : null}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor={identifierId}>
+                {mode === 'otp'
+                  ? '手机号'
+                  : (portal === 'enterprise' ? '账号' : '管理账号或手机号')}
+              </Label>
+              {allowOtp && isCompact ? (
+                <button
+                  type="button"
+                  className="shrink-0 text-xs font-medium text-ember-800 underline-offset-4 transition hover:text-ember-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember-200"
+                  onClick={() => switchMode(mode === 'password' ? 'otp' : 'password')}
+                >
+                  {mode === 'password' ? '短信验证码登录' : '密码登录'}
+                </button>
+              ) : null}
+            </div>
+            <Input
+              id={identifierId}
+              className={cn(inputClasses)}
+              value={identifier}
+              onChange={(event) => {
+                setIdentifier(event.target.value)
+                if (formError) setFormError(null)
+              }}
+              autoComplete="username"
+              placeholder={mode === 'otp'
+                ? '请输入手机号'
+                : portal === 'enterprise'
+                  ? '请输入企业账号或手机号'
+                  : '请输入管理账号或已验证手机号'}
+              autoFocus
+              required
+            />
           </div>
-          <Label htmlFor={identifierId}>
-            {mode === 'otp'
-              ? '手机号'
-              : (portal === 'enterprise' ? '企业账号或手机号' : '管理账号或手机号')}
-          </Label>
-          <Input
-            id={identifierId}
-            className="h-11 font-data focus-visible:border-ember-500 focus-visible:ring-ember-500/20"
-            value={identifier}
-            onChange={(event) => {
-              setIdentifier(event.target.value)
-              if (formError) setFormError(null)
-            }}
-            autoComplete="username"
-            placeholder={mode === 'otp'
-              ? '请输入手机号'
-              : portal === 'enterprise'
-                ? '请输入企业账号或已验证手机号'
-              : '请输入管理账号或已验证手机号'}
-            autoFocus
-            required
-          />
+          {mode === 'otp' ? (
+            <div className="space-y-2">
+              <Label htmlFor={codeId}>验证码</Label>
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <Input
+                  id={codeId}
+                  className={cn(inputClasses)}
+                  inputMode="numeric"
+                  value={code}
+                  onChange={(event) => {
+                    setCode(event.target.value)
+                    if (formError) setFormError(null)
+                  }}
+                  placeholder="请输入验证码"
+                  required
+                  maxLength={8}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 shrink-0"
+                  disabled={sendingCode || resendSeconds > 0}
+                  onClick={() => {
+                    void requestCode()
+                  }}
+                >
+                  {sendingCode ? '发送中…' : resendSeconds > 0 ? `${resendSeconds}s` : challengeId ? '重新发送' : '获取验证码'}
+                </Button>
+              </div>
+              {!isCompact && resendSeconds > 0 ? (
+                <p className="text-[11px] text-muted-foreground">
+                  验证码将在 {resendSeconds} 秒后可重新发送。
+                </p>
+              ) : null}
+              {!isCompact ? (
+                <p className="text-[11px] text-muted-foreground">
+                  <MessageSquareText className="mr-1 inline h-3.5 w-3.5" />
+                  请输入最近接收到的 4–8 位数字验证码。
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor={passwordId}>密码</Label>
+              <div className="relative">
+                {!isCompact ? (
+                  <KeyRound className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+                ) : null}
+                <Input
+                  id={passwordId}
+                  type={passwordVisible ? 'text' : 'password'}
+                  className={cn(inputClasses, 'h-11 pr-11', !isCompact && 'pl-9')}
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value)
+                    if (formError) setFormError(null)
+                  }}
+                  autoComplete="current-password"
+                  minLength={8}
+                  placeholder="请输入密码"
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => setPasswordVisible((current) => !current)}
+                  aria-label={passwordVisible ? '隐藏密码' : '显示密码'}
+                >
+                  {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-        {mode === 'otp' ? (
-          <div className="space-y-2 rounded-xl border border-border/75 bg-card/40 p-4 backdrop-blur-sm">
-            <Label htmlFor={codeId}>验证码</Label>
-            <div className="grid grid-cols-[1fr_auto] gap-2">
-              <Input
-                id={codeId}
-                inputMode="numeric"
-                value={code}
-                onChange={(event) => {
-                  setCode(event.target.value)
-                  if (formError) setFormError(null)
-                }}
-                placeholder="请输入验证码"
-                required
-                maxLength={8}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11"
-                disabled={sendingCode || resendSeconds > 0}
-                onClick={() => {
-                  void requestCode()
-                }}
-              >
-                {sendingCode ? '发送中…' : resendSeconds > 0 ? `${resendSeconds} 秒后重发` : challengeId ? '重新发送' : '获取验证码'}
-              </Button>
-            </div>
-            {resendSeconds > 0 ? (
-              <p className="text-[11px] text-muted-foreground">
-                验证码将在 {resendSeconds} 秒后可重新发送。
-              </p>
-            ) : null}
-            <p className="text-[11px] text-muted-foreground">
-              <MessageSquareText className="mr-1 inline h-3.5 w-3.5" />
-              请输入最近接收到的 4–8 位数字验证码。
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2 rounded-xl border border-border/75 bg-card/40 p-4 backdrop-blur-sm">
-            <Label htmlFor={passwordId}>密码</Label>
-            <div className="relative">
-              <KeyRound className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                id={passwordId}
-                type={passwordVisible ? 'text' : 'password'}
-                className="h-11 pl-9 pr-11 focus-visible:border-ember-500 focus-visible:ring-ember-500/20"
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value)
-                  if (formError) setFormError(null)
-                }}
-                autoComplete="current-password"
-                minLength={8}
-                placeholder="请输入密码"
-                required
-              />
-              <button
-                type="button"
-                className="absolute right-0 top-0 grid h-11 w-11 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                onClick={() => setPasswordVisible((current) => !current)}
-                aria-label={passwordVisible ? '隐藏密码' : '显示密码'}
-              >
-                {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-        )}
 
         {formError && (
           <div
@@ -404,7 +462,7 @@ export function LoginScreen({
         )}
 
         <Button
-          className="h-11 min-h-11 w-full bg-ember-700 text-white hover:bg-ember-800 focus-visible:ring-ember-700"
+          className={buttonClasses}
           disabled={submitting || !hydrated}
         >
           {submitting ? '正在登录…' : submitLabel}

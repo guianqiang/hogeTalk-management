@@ -56,13 +56,15 @@ const platformNavigation: ManagementNavGroup[] = [
     items: [
       { href: '/enterprises', label: '企业管理', note: '维护企业主体及相关资料', icon: 'enterprise', menuKey: 'enterprise_auth' },
       { href: '/legacy/chambers', label: '商会管理', note: '管理商会主体', icon: 'membership', menuKey: 'chamber_management' },
-      { href: '/supply-demand-reviews', label: '供需审核', note: '审核企业提交的供需信息', icon: 'supply', menuKey: 'content_supply_chain' },
+      // 企业供需提交后直接发布，平台审核菜单暂隐藏。
+      // { href: '/supply-demand-reviews', label: '供需审核', note: '审核企业提交的供需信息', icon: 'supply', menuKey: 'content_supply_chain' },
       { href: '/legacy/inquiries', label: '线索管理', note: '管理企业合作线索', icon: 'partner', menuKey: 'inquiry_cooperation' },
     ],
   },
   {
     label: '审核与治理',
     items: [
+      { href: '/onboarding-reviews', label: '入驻审核', note: '审核企业入驻申请', icon: 'review', menuKey: 'enterprise_auth' },
       { href: '/verifications', label: '平台认证', note: '审核企业 L1–L3 平台认证', icon: 'verification', menuKey: 'enterprise_auth' },
       { href: '/claims', label: '认领审核', note: '处理企业认领申请', icon: 'review', menuKey: 'enterprise_auth' },
       { href: '/duplicates', label: '重复企业', note: '核查疑似重复主体', icon: 'duplicate', menuKey: 'enterprise_auth' },
@@ -113,8 +115,11 @@ const enterpriseNavigation: ManagementNavGroup[] = [
     label: '企业工作台',
     items: [
       { href: '', label: '企业工作台', note: '企业运营概览', icon: 'dashboard', menuKey: 'enterprise_workspace' },
+      { href: '/enterprise-profile', label: '企业信息', note: '入驻申请与企业资料维护', icon: 'enterprise', menuKey: 'enterprise_workspace' },
+      { href: '/enterprise-verification', label: '平台认证', note: '申请与查看企业平台认证', icon: 'verification', menuKey: 'enterprise_workspace' },
       { href: '/supply-demands', label: '供需', note: '发布供需并跟进合作咨询', icon: 'supply', menuKey: 'supply_demand' },
       { href: '/ai-card', label: 'AI 名片', note: '维护企业人员对外名片', icon: 'card', menuKey: 'ai_card' },
+      { href: '/enterprise-accounts', label: '账号权限', note: '配置本企业普通成员工作台权限', icon: 'membership', menuKey: 'account_permissions' },
     ],
   },
 ]
